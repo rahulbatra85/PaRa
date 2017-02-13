@@ -1,0 +1,179 @@
+disconnect(0)
+Serv[0] Persist
+Starting Raft
+Term=0,VotedFor=0,Log=[{0 <nil> 0 0}]
+disconnect(1)
+Serv[1] Persist
+Starting Raft
+Term=0,VotedFor=0,Log=[{0 <nil> 0 0}]
+disconnect(2)
+Serv[2] Persist
+Starting Raft
+Serv[0], Follower State Enter
+connect(0)
+connect(1)
+connect(2)
+Test: basic persistence ...
+Serv[2], Server Starting
+Serv[2], Follower State Enter
+Serv[2], Follower State Exit
+Serv[2], Candidate State 
+Serv[2] Persist
+Serv[2] Persist
+Serv[2], Starting Election
+Serv[2], Wait in Candidate State
+Serv[2], sendRequestVote to 1
+Serv[2], sendRequestVote to 0
+Serv[1], Request Vote Enter
+Serv[1], Rcv on RequestVoteMsgCh
+Serv[1], Handler Request Vote Enter
+Serv[1] Persist
+Serv[1] Persist
+Serv[1] Persist
+Serv[1], Handler Request Vote Exit
+Serv[1], Request Vote Exit
+Serv[0], Request Vote Enter
+Serv[0], Rcv on RequestVoteMsgCh
+Serv[0], Handler Request Vote Enter
+Serv[0] Persist
+Serv[0] Persist
+Serv[2], sendRequestVote rsp from 1
+Serv[0] Persist
+Serv[0], Handler Request Vote Serv[2], Leader State
+Serv[0], Request Vote Exit
+Serv[2], sendRequestVote rsp from 0
+			Serv[2], Updt CommitIdx N=0, mIdx=[0 0 0]
+Serv[2] Persist
+Serv[2], AppendLogLeader Idx:1 Cmd: 11 Exit
+Serv[2] Start  Term=1,VotedFor=2,Log=[{0 <nil> 0 0} {1 11 0 0}]Serv[2], Send Heartbeats Enter
+Serv[2], AppendEntries[0] PrevLogIdx:0
+Serv[0], Rcv on AppendEntriesMsgCh
+Serv[0], handleAppendEntries Enter
+Serv[0], 	Term=1, NumEnt=1, LeadId=2, PrevLogIdx=0,PrevLogTerm=0,LeadCom=0
+Serv[0] Persist
+Serv[0], Appended@1
+Serv[0] Persist
+Serv[0], handleAppendEntries Exit, reply={1 true}
+Serv[0], From Leader
+Serv[2], AppendEntries[1] PrevLogIdx:0
+Serv[1], Rcv on AppendEntriesMsgCh
+Serv[1], handleAppendEntries Enter
+Serv[1], 	Term=1, NumEnt=1, LeadId=2, PrevLogIdx=0,PrevLogTerm=0,LeadCom=0
+Serv[1] Persist
+Serv[1], Appended@1
+Serv[1] Persist
+Serv[1], handleAppendEntries Exit, reply={1 true}
+Serv[1], From Leader
+Serv[2], Send Heartbeats Exit false true
+			Serv[2], Updt CommitIdx N=1, mIdx=[1 1 1]
+		Serv[2], Updt CommitIdx: 1
+                         Serv[2], Log: [{0 <nil> 0 0} {1 11 0 0}]
+                         Serv[2], Updt SM: 1
+Serv[2], Send Heartbeats Enter
+Serv[0], Rcv on AppendEntriesMsgCh
+Serv[0], handleAppendEntries Enter
+Serv[0], 	Term=1, NumEnt=0, LeadId=2, PrevLogIdx=1,PrevLogTerm=1,LeadCom=1
+Serv[0] Persist
+Serv[0], Updt CommitIdx: 1
+Serv[0], handleAppendEntries Exit, reply={1 true}
+Serv[0], From Leader
+Serv[1], Rcv on AppendEntriesMsgCh
+Serv[1], handleAppendEntries Enter
+Serv[1], 	Term=1, NumEnt=0, LeadId=2, PrevLogIdx=1,PrevLogTerm=1,LeadCom=1
+Serv[1] Persist
+Serv[1], Updt CommitIdx: 1
+Serv[1], handleAppendEntries Exit, reply={1 true}
+Serv[1], From Leader
+Serv[2], Send Heartbeats Exit false true
+			Serv[2], Updt CommitIdx N=1, mIdx=[1 1 1]
+                         Serv[1], Log: [{0 <nil> 0 0} {1 11 0 0}]
+                         Serv[1], Updt SM: 1
+                         Serv[0], Log: [{0 <nil> 0 0} {1 11 0 0}]
+                         Serv[0], Updt SM: 1
+disconnect(0)
+Serv[0] Persist
+Starting Raft
+Term=0,VotedFor=0,Log=[{0 <nil> 0 0}]
+disconnect(1)
+Serv[1] Persist
+Serv[0], Server Starting
+Serv[0], Follower State Enter
+Starting Raft
+Term=0,VotedFor=0,Log=[{0 <nil> 0 0}]
+disconnect(2)
+Serv[2] Persist
+Serv[1], Server Starting
+Serv[1], Follower State Enter
+Starting Raft
+Term=0,VotedFor=0,Log=[{0 <nil> 0 0}]
+disconnect(0)
+connect(0)
+disconnect(1)
+connect(1)
+disconnect(2)
+connect(2)
+Serv[2], Server Starting
+Serv[2], Follower State Enter
+Serv[2], Send Heartbeats Enter
+Serv[2], Send Heartbeats Exit false false
+			Serv[2], Updt CommitIdx N=1, mIdx=[1 1 1]
+Serv[2], Send Heartbeats Enter
+Serv[2], Send Heartbeats Exit false false
+Serv[2], Leader State Exit
+Serv[2], Follower State Enter
+Serv[0], Follower State Exit
+Serv[0], Candidate State 
+Serv[0] Persist
+Serv[0] Persist
+Serv[0], Starting Election
+Serv[0], Wait in Candidate State
+Serv[0], sendRequestVote to 2
+Serv[0], sendRequestVote to 1
+Serv[2], Request Vote Enter
+Serv[2], Rcv on RequestVoteMsgCh
+Serv[2], Handler Request Vote Enter
+Serv[1], Request Vote Enter
+Serv[1], Rcv on RequestVoteMsgCh
+Serv[1], Handler Request Vote Enter
+Serv[2] Persist
+Serv[1] Persist
+Serv[2] Persist
+Serv[1] Persist
+Serv[2] Persist
+Serv[2], Handler Request Vote Exit
+Serv[1] Persist
+Serv[1], Handler Request Vote Exit
+Serv[1], Request Vote Exit
+Serv[0], sendRequestVote rsp from 1
+Serv[0], Vote Resp, cnt=2
+Serv[0], Candidate State Exit
+Serv[0], Leader State
+			Serv[0], Updt CommitIdx N=0, mIdx=[0 0 0]
+Serv[0] Persist
+Serv[0], AppendLogLeader Idx:1 Cmd: 12 Exit
+Serv[0] Start  Term=1,VotedFor=0,Log=[{0 <nil> 0 0} {1 12 0 0}]Serv[0], Send Heartbeats Enter
+Serv[0], AppendEntries[1] PrevLogIdx:0
+Serv[1], Rcv on AppendEntriesMsgCh
+Serv[1], handleAppendEntries Enter
+Serv[1], 	Term=1, NumEnt=1, LeadId=0, PrevLogIdx=0,PrevLogTerm=0,LeadCom=0
+Serv[1] Persist
+Serv[1], Appended@1
+Serv[1] Persist
+Serv[1], handleAppendEntries Exit, reply={1 true}
+Serv[1], From Leader
+Serv[0], AppendEntries[2] PrevLogIdx:0
+Serv[2], Rcv on AppendEntriesMsgCh
+Serv[2], handleAppendEntries Enter
+Serv[2], 	Term=1, NumEnt=1, LeadId=0, PrevLogIdx=0,PrevLogTerm=0,LeadCom=0
+Serv[2] Persist
+Serv[2], Appended@1
+Serv[2] Persist
+Serv[2], handleAppendEntries Exit, reply={1 true}
+Serv[2], From Leader
+Serv[0], Send Heartbeats Exit false true
+			Serv[0], Updt CommitIdx N=1, mIdx=[1 1 1]
+		Serv[0], Updt CommitIdx: 1
+                         Serv[0], Log: [{0 <nil> 0 0} {1 12 0 0}]
+                         Serv[0], Updt SM: 1
+exit status 1
+FAIL	raft	1.931s
