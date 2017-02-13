@@ -1,0 +1,5 @@
+package paxos
+
+import (
+	"fmt"
+)
