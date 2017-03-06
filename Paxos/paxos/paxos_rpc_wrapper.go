@@ -38,6 +38,54 @@ func (s *PaxosRPCServer) StartWrapper(req *StartRequest, reply *StartReply) erro
 	return err
 }
 
+//Propose Wrapper
+func (s *PaxosRPCServer) ProposeWrapper(req *ProposeRequest, reply *ProposeReply) error {
+	//\todo add enable check
+	err := s.node.Propose(req)
+	reply.Success = err == nil
+	return err
+}
+
+//Decision Wrapper
+func (s *PaxosRPCServer) DecisionWrapper(req *DecisionRequest, reply *DecisionReply) error {
+	//\todo add enable check
+	err := s.node.Decision(req)
+	reply.Success = err == nil
+	return err
+}
+
+//P1a Wrapper
+func (s *PaxosRPCServer) P1aWrapper(req *P1aRequest, reply *P1aReply) error {
+	//\todo add enable check
+	err := s.node.P1a(req)
+	reply.Success = err == nil
+	return err
+}
+
+//P2a Wrapper
+func (s *PaxosRPCServer) P2aWrapper(req *P2aRequest, reply *P2aReply) error {
+	//\todo add enable check
+	err := s.node.P2a(req)
+	reply.Success = err == nil
+	return err
+}
+
+//P1b Wrapper
+func (s *PaxosRPCServer) P1bWrapper(req *P1bRequest, reply *P1bReply) error {
+	//\todo add enable check
+	err := s.node.P1b(req)
+	reply.Success = err == nil
+	return err
+}
+
+//P2b Wrapper
+func (s *PaxosRPCServer) P2bWrapper(req *P2bRequest, reply *P2bReply) error {
+	//\todo add enable check
+	err := s.node.P2b(req)
+	reply.Success = err == nil
+	return err
+}
+
 //GetStateWrapper
 func (s *PaxosRPCServer) GetStateWrapper(req *GetStateRequest, reply *GetStateReply) error {
 	err, state := s.node.GetState(req)

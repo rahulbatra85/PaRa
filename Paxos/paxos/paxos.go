@@ -23,6 +23,7 @@ type PaxosNode struct {
 	localAddr   NodeAddr     //LocalAddr
 	othersAddr  []NodeAddr   //OtherAddrs
 	nodeMgrAddr NodeAddr     //Node Manager
+	app         *Application
 
 	config    *PaxosConfig //Config
 	RPCServer *PaxosRPCServer
@@ -31,6 +32,11 @@ type PaxosNode struct {
 
 	//Data
 	ballotNum int
+
+	//Replica, Leader, and Acceptor
+	r *Replica
+	l *Leader
+	a *Acceptor
 
 	//Channels
 
@@ -42,7 +48,7 @@ type NodeAddr struct {
 	Addr string
 }
 
-func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config *PaxosConfig) (pp *PaxosNode) {
+func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config *PaxosConfig) (pp *PaxosNode, app *Application) {
 	//Inputs: Port, RemoteAddr, Config
 
 	//PaxosNode
@@ -56,7 +62,7 @@ func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config
 	//Init channels
 	//app state
 	//etc
-	p.ballotNum = 0
+	p.app = app
 	if nodeMgrAddr != nil {
 		p.nodeMgrAddr = *nodeMgrAddr
 	} else {

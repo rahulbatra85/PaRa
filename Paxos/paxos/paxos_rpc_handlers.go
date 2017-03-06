@@ -43,6 +43,49 @@ func (p *PaxosNode) Start(request *StartRequest) error {
 	return nil
 }
 
+func (p *PaxosNode) Propose(request *ProposeRequest) error {
+	//forward to leader
+	p.l.ProposeCh <- request
+	return nil
+}
+func (p *PaxosNode) Decision(request *DecisionRequest) error {
+	//forward to replica
+	p.r.DecCh <- request
+	return nil
+}
+
+func (p *PaxosNode) P1a(request *P1aRequest) error {
+	//forward to acceptor
+	p.a.P1aCh < request
+	return nil
+}
+
+func (p *PaxosNode) P2a(request *P2aRequest) error {
+	//forward to acceptor
+	p.a.P2aCh <- request
+	return nil
+}
+
+func (p *PaxosNode) P1b(request *P1bRequest) error {
+	//forward to scout
+	//See if Scout is still active.Otherwise, ignore
+	p.l.MuScouts.RLock()
+	if s, ok := p.l.Scouts[request.Scout]; ok {
+		s.P1bCh <- request
+	}
+	p.l.MuScouts.Unlock()
+}
+
+func (p *PaxosNode) P2b(request *P2bRequest) error {
+	//forward to commander
+	//See if Commander is still active. Otherwise, ignore
+	p.l.MuCommanders.RLock()
+	if c, ok := p.l.Commanders[request.CommanderId]; ok {
+		c.P2bCh <- request
+	}
+	p.l.MuScouts.Unlock()
+}
+
 //GetState
 func (p *PaxosNode) GetState(request *GetStateRequest) (error, int) {
 	p.mu.Lock()
