@@ -6,7 +6,7 @@ import (
 )
 
 //RPC client connection map
-var clientConn = make(map[string]*rpc.Client)
+var replicaConn = make(map[string]*rpc.Client)
 
 //JoinRPC
 type JoinRequest struct {
@@ -191,21 +191,25 @@ func (p *PaxosNode) P2bRPC(remoteNode *NodeAddr, request P2bRequest) (*P2bReply,
 /////////////////////////////////////////
 //Client
 /////////////////////////////////////////
-//Register
-type RegisterClientRequest struct {
-}
-
-type RegisterClientReply struct {
-}
 
 //Request
 type ClientRequest struct {
+	Cmd Command
 }
 
 type ClientReply struct {
+	Success bool
 }
 
-//Response
+func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequest) (*ClientReply, error) {
+	var reply ClientReply
+	err := makeRemoteCall(remoteNode, "ClientRequestWrapper", request, &reply)
+	if err != nil {
+		return nil, err
+	}
+
+	return &reply, err
+}
 
 /////////////////////////////////////////
 //Node Manager
@@ -248,19 +252,19 @@ func GetStateRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
 //makeRemoteCall
 func makeRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}) error {
 	var err error
-	client, ok := clientConn[remoteAddr.Addr]
+	client, ok := replicaConn[remoteAddr.Addr]
 	if !ok {
 		client, err = rpc.Dial("tcp", remoteAddr.Addr)
 		if err != nil {
 			return err
 		}
-		clientConn[remoteAddr.Addr] = client
+		replicaConn[remoteAddr.Addr] = client
 	}
 
 	fullProcName := fmt.Sprintf("%v.%v", remoteAddr.Addr, procName)
 	err = client.Call(fullProcName, request, reply)
 	if err != nil {
-		delete(clientConn, remoteAddr.Addr)
+		delete(replicaConn, remoteAddr.Addr)
 	}
 	return err
 

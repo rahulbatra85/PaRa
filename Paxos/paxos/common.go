@@ -1,18 +1,26 @@
 package paxos
 
-type Command struct {
-	Cid    int
-	SeqNum int
-	Op     Operation
+type NodeAddr struct {
+	Id   string
+	Addr string
 }
 
+type Command struct {
+	ClientNodeAddr NodeAddr
+	Cid            int
+	SeqNum         int
+	Op             Operation
+}
+
+//\todo make it generic
 type Operation struct {
-	Name string
-	Data interface{}
+	OpType string
+	Key    string
+	Data   string
 }
 
 type Application interface {
-	ApplyOperation(op Operation)
+	ApplyOperation(op Operation) string
 }
 
 //Ballot Numbers are lexicographically ordered
@@ -92,4 +100,13 @@ func StringBallot(b BallotNum) string {
 
 func StringBallotSlot(b BallotNum, s int) string {
 	s = fmt.Sprintf("%v_%v_%v", b.Id, b.Lid, s)
+}
+
+func HashAddr(addr string, length int) string {
+	h := sha1.New()
+	h.Write([]byte(addr))
+	ha := h.Sum(nil)
+	id := big.Int{}
+	id.SetBytes(ha[:length])
+	return id.String()
 }

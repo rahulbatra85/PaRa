@@ -43,11 +43,6 @@ type PaxosNode struct {
 	//Application State
 }
 
-type NodeAddr struct {
-	Id   string
-	Addr string
-}
-
 func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config *PaxosConfig) (pp *PaxosNode, app *Application) {
 	//Inputs: Port, RemoteAddr, Config
 
@@ -127,13 +122,4 @@ func (p *PaxosNode) startNodes() {
 	}
 
 	go p.run()
-}
-
-func HashAddr(addr string, length int) string {
-	h := sha1.New()
-	h.Write([]byte(addr))
-	ha := h.Sum(nil)
-	id := big.Int{}
-	id.SetBytes(ha[:length])
-	return id.String()
 }
