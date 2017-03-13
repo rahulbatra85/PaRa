@@ -26,20 +26,56 @@ func (r *RaftNode) Start(request *StartRequest) error {
 
 	//Set OthersAddr list
 	r.INF("Received START")
-	r.othersAddr = make([]NodeAddr, len(request.OtherNodes))
-	for i, node := range request.OtherNodes {
-		r.othersAddr[i].Id = node.Id
-		r.othersAddr[i].Addr = node.Addr
-		r.INF("OtherNode[%d]=[%v] %v", i, node.Id, node.Addr)
+	for _, node := range request.OtherNodes {
+		r.othersAddr = append(r.othersAddr, node)
 	}
 
+	r.INF("OtherNode=%v", r.othersAddr)
 	if r.nodeMgrAddr.Id != "" && r.nodeMgrAddr.Addr != "" {
 		ReadyNotificationRPC(&r.nodeMgrAddr, &r.localAddr)
 	}
 
 	//Start Server
-	go r.run()
+	go r.run_server()
 
+	return nil
+}
+
+//
+// RequestVote RPC handler.
+//
+//RequestVoteMsg structure to wrap up an incoming RPC msg
+type RequestVoteMsg struct {
+	args  RequestVoteArgs
+	reply chan RequestVoteReply
+}
+
+//This receives an incoming RPC message and packages it into RequestVoteMsg structure.
+//It then forwards to the run_server go routine through requestVoteMsgCh. And waits
+//on replyCh before responding back to the callee server
+func (r *RaftNode) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) error {
+	replyCh := make(chan RequestVoteReply)
+	r.requestVoteMsgCh <- RequestVoteMsg{*args, replyCh}
+	*reply = <-replyCh
+	return nil
+}
+
+// AppendEntries RPC handler.
+//
+//AppendEntriesMsg structure to wrap up an incoming RPC msg
+type AppendEntriesMsg struct {
+	args  AppendEntriesArgs
+	reply chan AppendEntriesReply
+}
+
+//
+//This receives an incoming RPC message and packages it into AppendEntriesMsg structure.
+//It then forwards to the local "run_server" go routine through appendEntriesMsgCh . And waits
+//on replyCh before responding back to the callee server
+func (r *RaftNode) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) error {
+	replyCh := make(chan AppendEntriesReply)
+	r.appendEntriesMsgCh <- AppendEntriesMsg{*args, replyCh}
+	*reply = <-replyCh
 	return nil
 }
 

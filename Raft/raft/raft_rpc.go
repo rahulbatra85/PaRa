@@ -62,6 +62,44 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []NodeAddr) error {
 	return err
 }
 
+// RequestVote RPC
+type RequestVoteArgs struct {
+	Term        int
+	CandidateId string
+	LastLogIdx  int
+	LastLogTerm int
+}
+
+type RequestVoteReply struct {
+	Term        int
+	VoteGranted bool
+}
+
+func (r *RaftNode) RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs, reply *RequestVoteReply) error {
+	err := makeRemoteCall(remoteNode, "RequestVoteWrapper", req, reply)
+	return err
+}
+
+// Append Entries RPC
+type AppendEntriesArgs struct {
+	Term         int
+	LeaderId     string
+	PrevLogIdx   int
+	PrevLogTerm  int
+	Entries      []LogEntry
+	LeaderCommit int
+}
+
+type AppendEntriesReply struct {
+	Term    int
+	Success bool
+}
+
+func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs, reply *AppendEntriesReply) error {
+	err := makeRemoteCall(remoteNode, "AppendEntriesWrapper", req, reply)
+	return err
+}
+
 /////////////////////////////////////////
 //Client
 /////////////////////////////////////////

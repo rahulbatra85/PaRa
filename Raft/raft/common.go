@@ -5,6 +5,14 @@ import (
 	"math/big"
 )
 
+type RaftState int
+
+const (
+	FOLLOWER RaftState = iota
+	CANDIDATE
+	LEADER
+)
+
 type NodeAddr struct {
 	Id   string
 	Addr string

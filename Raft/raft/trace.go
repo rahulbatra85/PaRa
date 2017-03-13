@@ -33,14 +33,14 @@ func SetInfoTrace(enable bool) {
 	}
 }
 
-func (p *RaftNode) DBG(formatString string, args ...interface{}) {
-	DebugTrace.Output(2, fmt.Sprintf("DBG: [%v] %v", p.Id, fmt.Sprintf(formatString, args...)))
+func (r *RaftNode) DBG(formatString string, args ...interface{}) {
+	DebugTrace.Output(2, fmt.Sprintf("DBG: [%v] %v", r.Id, fmt.Sprintf(formatString, args...)))
 }
-func (p *RaftNode) INF(formatString string, args ...interface{}) {
-	InfoTrace.Output(2, fmt.Sprintf("INF: [%v] %v", p.Id, fmt.Sprintf(formatString, args...)))
+func (r *RaftNode) INF(formatString string, args ...interface{}) {
+	InfoTrace.Output(2, fmt.Sprintf("INF: [%v] %v", r.Id, fmt.Sprintf(formatString, args...)))
 }
-func (p *RaftNode) ERR(formatString string, args ...interface{}) {
-	ErrTrace.Output(2, fmt.Sprintf("ERR: [%v] %v", p.Id, fmt.Sprintf(formatString, args...)))
+func (r *RaftNode) ERR(formatString string, args ...interface{}) {
+	ErrTrace.Output(2, fmt.Sprintf("ERR: [%v] %v", r.Id, fmt.Sprintf(formatString, args...)))
 }
 
 ///////////////////////////////////

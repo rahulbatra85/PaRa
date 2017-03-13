@@ -38,6 +38,18 @@ func (s *RaftRPCServer) StartWrapper(req *StartRequest, reply *StartReply) error
 	return err
 }
 
+//RequestVoteWrapper
+func (s *RaftRPCServer) RequestVoteWrapper(req *RequestVoteArgs, reply *RequestVoteReply) error {
+	err := s.node.RequestVote(req, reply)
+	return err
+}
+
+//AppendEntriesWrapper
+func (s *RaftRPCServer) AppendEntriesWrapper(req *AppendEntriesArgs, reply *AppendEntriesReply) error {
+	err := s.node.AppendEntries(req, reply)
+	return err
+}
+
 //GetStateWrapper
 func (s *RaftRPCServer) GetStateWrapper(req *GetStateRequest, reply *GetStateReply) error {
 	err := s.node.GetState(req)
