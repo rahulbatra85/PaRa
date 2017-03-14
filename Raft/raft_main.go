@@ -10,14 +10,17 @@ func main() {
 	var cAddr string
 	var nmAddr string
 	var port int
+	var eTO int
 
 	flag.IntVar(&port, "port", 0, "Server Port. Default is random.")
 	flag.StringVar(&cAddr, "cAddr", "", "Addr of Cluster Node. Default is empty.")
 	flag.StringVar(&nmAddr, "nmAddr", "", "Addr of Node Manager")
+	flag.IntVar(&eTO, "timeout", 0, "Election Timeout")
 
 	flag.Parse()
 
 	config := raft.CreateRaftConfig()
+	config.ElectionTimeout = eTO
 
 	var remoteNodeAddr *raft.NodeAddr
 	if cAddr != "" {

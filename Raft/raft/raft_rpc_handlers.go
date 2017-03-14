@@ -79,10 +79,23 @@ func (r *RaftNode) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesRe
 	return nil
 }
 
-//GetState
-func (r *RaftNode) GetState(request *GetStateRequest) error {
+//GetTerm
+func (r *RaftNode) GetTerm(req *GetTermRequest, reply *GetTermReply) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	reply.Success = true
+	reply.Term = r.getCurrentTerm()
+
+	return nil
+}
+
+//GetState
+func (r *RaftNode) GetState(req *GetStateRequest, reply *GetStateReply) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	reply.Success = true
+	reply.State = r.getState()
+	r.INF("State=%d", reply.State)
 
 	return nil
 }

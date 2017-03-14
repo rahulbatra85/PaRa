@@ -15,13 +15,11 @@ func main() {
 
 	config := raft.CreateNodeManagerConfig()
 
-	r := raft.MakeNodeManager(port, config)
+	nm := raft.MakeNodeManager(port, config)
 
 	fmt.Printf("Creating Node Manager. Port=%v\n", port)
-	fmt.Printf("%v\n", r)
-	//\TODO add interaction with NodeManager
+	fmt.Printf("%v\n", nm)
 
-	//Now just loop forever
-	for {
-	}
+	nm.Run()
+
 }

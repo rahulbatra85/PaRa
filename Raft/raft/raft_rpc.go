@@ -127,29 +127,54 @@ func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequest) (*ClientReply
 //Node Manager
 /////////////////////////////////////////
 
-//GetState
-type GetStateRequest struct {
+//GetTerm
+type GetTermRequest struct {
 	RemoteNode NodeAddr
-	FromAddr   NodeAddr
 }
 
-type GetStateReply struct {
+type GetTermReply struct {
+	Term    int
 	Success bool
 }
 
-func GetStateRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
-	req := GetStateRequest{RemoteNode: *remoteNode, FromAddr: *fromNode}
+func GetTermRPC(remoteNode *NodeAddr) (error, int) {
+	req := GetTermRequest{RemoteNode: *remoteNode}
+
+	var reply GetTermReply
+	err := makeRemoteCall(remoteNode, "GetTermWrapper", req, &reply)
+	if err != nil {
+		return err, reply.Term
+	}
+	if !reply.Success {
+		return fmt.Errorf("Unable to get state"), reply.Term
+	}
+
+	return err, reply.Term
+}
+
+//GetState
+type GetStateRequest struct {
+	RemoteNode NodeAddr
+}
+
+type GetStateReply struct {
+	State   RaftState
+	Success bool
+}
+
+func GetStateRPC(remoteNode *NodeAddr) (error, RaftState) {
+	req := GetStateRequest{RemoteNode: *remoteNode}
 
 	var reply GetStateReply
 	err := makeRemoteCall(remoteNode, "GetStateWrapper", req, &reply)
 	if err != nil {
-		return err
+		return err, reply.State
 	}
 	if !reply.Success {
-		return fmt.Errorf("Unable to get state")
+		return fmt.Errorf("Unable to get state"), reply.State
 	}
 
-	return err
+	return err, reply.State
 }
 
 //Enable Node

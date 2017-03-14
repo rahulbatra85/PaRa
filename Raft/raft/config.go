@@ -13,8 +13,8 @@ func CreateRaftConfig() *RaftConfig {
 	c.NodeIdSize = 2
 	c.ClusterSize = 3
 	c.Majority = (c.ClusterSize + 1) / 2
-	c.HeartbeatFrequency = 150
-	c.ElectionTimeout = 400
+	c.HeartbeatFrequency = 50
+	c.ElectionTimeout = 300
 	return c
 }
 

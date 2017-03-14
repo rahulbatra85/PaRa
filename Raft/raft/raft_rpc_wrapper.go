@@ -50,9 +50,16 @@ func (s *RaftRPCServer) AppendEntriesWrapper(req *AppendEntriesArgs, reply *Appe
 	return err
 }
 
+//GetTermWrapper
+func (s *RaftRPCServer) GetTermWrapper(req *GetTermRequest, reply *GetTermReply) error {
+	err := s.node.GetTerm(req, reply)
+	reply.Success = err == nil
+	return err
+}
+
 //GetStateWrapper
 func (s *RaftRPCServer) GetStateWrapper(req *GetStateRequest, reply *GetStateReply) error {
-	err := s.node.GetState(req)
+	err := s.node.GetState(req, reply)
 	reply.Success = err == nil
 	return err
 }

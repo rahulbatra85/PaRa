@@ -14,6 +14,7 @@ func (nm *NodeManager) ReadyNotification(request *ReadyNotificationRequest) erro
 		return fmt.Errorf("Node Notified after all nodes have notified")
 	} else {
 		nm.serversAddr = append(nm.serversAddr, request.FromAddr)
+		nm.connState[request.FromAddr] = true
 	}
 
 	return nil

@@ -45,7 +45,7 @@ func (r *RaftNode) run_server() {
 //is in FOLLOWER state
 //
 func (r *RaftNode) do_follower() (nextState RaftState) {
-	r.INF(" Follower State Enter\n")
+	r.INF(" Follower State Enter Term=%d\n", r.getCurrentTerm())
 	rcvAppendEntries := false
 	for {
 		select {
@@ -53,11 +53,11 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 			r.DBG(" Rcv on AppendEntriesMsgCh\n")
 			fallback := r.handleAppendEntries(msg)
 			if fallback != true {
-				r.DBG(" From Leader\n")
+				r.INF(" From Leader\n")
 				rcvAppendEntries = true
 			}
 		case msg := <-r.requestVoteMsgCh:
-			r.DBG(" Rcv on RequestVoteMsgCh\n")
+			r.INF(" Rcv on RequestVoteMsgCh\n")
 			r.handleRequestVote(msg)
 		case <-r.appendEntriesReplyCh:
 			//Do nothing
@@ -65,7 +65,7 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 			//Do nothing
 		case <-r.makeElectionTimeout():
 			if rcvAppendEntries == true {
-				r.DBG(" Rcv on ElecTO\n")
+				r.INF(" Rcv on ElecTO\n")
 				rcvAppendEntries = false
 			} else {
 				return CANDIDATE
@@ -79,7 +79,7 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 //is in CANDIDATE state
 //
 func (r *RaftNode) do_candidate() (nextState RaftState) {
-	r.INF(" Candidate State \n")
+	r.INF(" Candidate State Term=%d\n", r.getCurrentTerm())
 	r.setCurrentTerm(r.getCurrentTerm() + 1)
 	r.setVotedFor(r.Id)
 	voteCnt := 1
@@ -104,7 +104,7 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 			}
 			if msg.VoteGranted == true {
 				voteCnt++
-				r.DBG(" Vote Resp, cnt=%d\n", voteCnt)
+				r.INF(" Vote Resp, cnt=%d\n", voteCnt)
 				if voteCnt >= r.config.Majority {
 					return LEADER
 				}
@@ -121,7 +121,7 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 //is in LEADER state
 //
 func (r *RaftNode) do_leader() (nextState RaftState) {
-	r.INF(" Leader State\n")
+	r.INF(" Leader State Term=%d\n", r.getCurrentTerm())
 	r.matchIndex[r.localAddr] = 0
 	r.nextIndex[r.localAddr] = r.GetLastLogIndex() + 1
 	for _, n := range r.othersAddr {
@@ -261,7 +261,14 @@ func (r *RaftNode) sendHeartBeats() (fallBack, sentToMajority bool) {
 
 // This function creates timer channel with random timeout.
 func (r *RaftNode) makeElectionTimeout() <-chan time.Time {
-	return time.After(time.Duration(((rand.Int() % r.config.ElectionTimeout) + r.config.ElectionTimeout)) * time.Millisecond)
+	val := rand.Int()
+	val = val + 100*rand.Int()
+	if val < 0 {
+		val *= -1
+	}
+	to := (val % r.config.ElectionTimeout) + r.config.ElectionTimeout
+	r.INF("ElectionTimeout=%d\n", to)
+	return time.After(time.Duration(to) * time.Millisecond)
 }
 
 //This functions creates timer channel with heartBeat timeout
@@ -392,11 +399,12 @@ func (r *RaftNode) handleRequestVote(msg RequestVoteMsg) {
 //
 func (r *RaftNode) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	// TODO: Students should implement this method
-	r.DBG(" Handler Competing Request Vote Enter \n")
+	r.INF(" Handler Competing Request Vote Enter \n")
 	retVal := false
 	reply := RequestVoteReply{}
 	if r.getCurrentTerm() > msg.args.Term {
 		reply.VoteGranted = false
+		r.INF("Term Greated VoteGranted=False\n")
 		if r.state != FOLLOWER {
 			retVal = true
 		}
