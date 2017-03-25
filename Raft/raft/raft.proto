@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+
+option java_multiple_files = true;
+option java_package = "raft";
+option java_outer_classname = "raftProto";
+
+
+package raft;
+
+// Raft RPC
+service RaftRPC {
+	rpc JoinRPC (JoinRequest) returns (JoinReply) {}
+  	rpc StartRPC (StartRequest) returns (StartReply) {}
+	rpc RequestVoteRPC (RequestVoteArgs) returns(RequestVoteReply) {}
+	rpc AppendEntriesRPC (AppendEntriesArgs) returns(AppendEntriesReply) {}
+	rpc ClientRequestRPC (ClientRequest) returns(ClientReply) {}
+	rpc GetTermRPC (GetTermRequest) returns (GetTermReply) {}
+ 	rpc GetStateRPC (GetStateRequest) returns(GetStateReply) {}
+    rpc EnableNodeRPC(EnableNodeRequest) returns(EnableNodeReply) {}
+	rpc DisableNodeRPC(DisableNodeRequest) returns(DisableNodeReply) {}
+	rpc SetNodetoNodeRPC(SetNodetoNodeRequest) returns(SetNodetoNodeReply) {}
+
+	
+}
+
+//Raft State
+enum RaftState {
+	FOLLOWER = 0;
+	CANDIDATE = 1;
+	LEADER = 2;
+}
+
+//Node Addr
+message NodeAddr {
+  	string Addr = 1;
+	string Id = 2;
+}
+
+message Command {
+ 	NodeAddr	ClientNodeAddr = 1;
+	int32 		Cid = 2;
+	int32 		SeqNum = 3;       
+	Operation 	Op = 4;             
+}
+
+message Operation {
+	string  OpType = 1; 
+	string  Key = 2;    
+ 	string	Data = 3;   
+}
+
+message LogEntry {
+	int32 Term = 1;
+	Command Cmd = 2;
+	int32 ClientId = 3;
+	int32 ClientSeqNum = 4;
+}
+
+//Join Request
+message JoinRequest{
+	NodeAddr RemoteNode = 1;
+	NodeAddr FromNode = 2;
+}
+
+message JoinReply{
+	bool Success = 1;
+}
+
+//Start Request
+message StartRequest{
+  	NodeAddr RemoteNode = 1;
+	repeated NodeAddr OtherNodes = 2;
+}
+
+message StartReply{
+	bool Success = 1;
+}
+
+//RequestVoteRPC
+message RequestVoteArgs {
+	NodeAddr FromNode = 1;
+	int32 Term = 2;
+	string CandidateId = 3;
+	int32 LastLogIdx = 4;
+	int32 LastLogTerm = 5;
+}
+
+message RequestVoteReply {
+	int32 Term = 1;
+	bool VoteGranted = 2;
+}
+
+//AppendEntriesRPC
+message AppendEntriesArgs {
+	NodeAddr FromNode = 1;
+	int32 Term = 2;
+	string LeaderId = 3;
+	int32 PrevLogIdx = 4;
+	int32 PrevLogTerm = 5;
+	repeated LogEntry Entries = 6;
+	int32 LeaderCommit = 7;
+}
+
+message AppendEntriesReply {
+	int32 Term = 1;
+	bool Success = 2;
+}
+
+/////////////////////////////////////////
+//Node Manager
+/////////////////////////////////////////
+
+//GetTerm
+message GetTermRequest  {
+	NodeAddr RemoteNode = 1; 
+}
+
+message GetTermReply  {
+	int32 Term = 1;    
+	bool Success = 2; 
+}
+
+//GetState
+message GetStateRequest  {
+	NodeAddr RemoteNode = 1; 
+}
+
+message GetStateReply  {
+	RaftState State = 1;   
+	bool Success = 2;
+}
+
+//Enable Node
+message EnableNodeRequest  {
+}
+
+message EnableNodeReply  {
+	bool Success = 1; 
+}
+
+//Disable Node
+message DisableNodeRequest  {
+}
+
+message DisableNodeReply  {
+	bool Success = 1; 
+}
+
+//SetNodetoNode
+message SetNodetoNodeRequest  {
+	NodeAddr ToNode = 1;
+ 	bool Enable = 2;
+}
+
+message SetNodetoNodeReply  {
+	bool Success = 1;
+}
+
+/////////////////////////////////////////
+//Client
+/////////////////////////////////////////
+
+//Request
+message ClientRequest {
+	Command Cmd = 1;
+}
+
+message ClientReply {
+	bool Success = 1;
+}

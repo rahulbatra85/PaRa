@@ -20,7 +20,9 @@ func main() {
 	flag.Parse()
 
 	config := raft.CreateRaftConfig()
-	config.ElectionTimeout = eTO
+	if eTO > config.ElectionTimeout {
+		config.ElectionTimeout = eTO
+	}
 
 	var remoteNodeAddr *raft.NodeAddr
 	if cAddr != "" {

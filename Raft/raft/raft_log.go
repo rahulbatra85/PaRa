@@ -7,26 +7,27 @@ package raft
 //
 //Raft Log Entry
 //
+/*
 type LogEntry struct {
 	Term         int
 	Cmd          interface{}
 	ClientId     int
 	ClientSeqNum int
-}
+}*/
 
 //
 //Returns last log index
 //
-func (r *RaftNode) GetLastLogIndex() int {
+func (r *RaftNode) GetLastLogIndex() int32 {
 	r.stmu.RLock()
 	defer r.stmu.RUnlock()
-	return len(r.Log) - 1
+	return int32(len(r.Log) - 1)
 }
 
 //
 //Returns Last Log Entry Term
 //
-func (r *RaftNode) GetLastLogTerm() int {
+func (r *RaftNode) GetLastLogTerm() int32 {
 	r.stmu.RLock()
 	defer r.stmu.RUnlock()
 	return r.Log[len(r.Log)-1].Term
@@ -35,10 +36,10 @@ func (r *RaftNode) GetLastLogTerm() int {
 //
 //Appends entry to log
 //
-func (r *RaftNode) AppendLog(entry LogEntry) {
+func (r *RaftNode) AppendLog(entry *LogEntry) {
 	r.stmu.Lock()
 	defer r.stmu.Unlock()
-	r.Log = append(r.Log, entry)
+	r.Log = append(r.Log, *entry)
 	//persist \\todo
 }
 
@@ -66,19 +67,19 @@ func (r *RaftNode) AppendLogLeader(command interface{}) (int, int, bool) {
 }*/
 
 //Return Log Entry at specified index
-func (r *RaftNode) GetLogEntry(idx int) LogEntry {
+func (r *RaftNode) GetLogEntry(idx int32) *LogEntry {
 	r.stmu.RLock()
 	defer r.stmu.RUnlock()
-	return r.Log[idx]
+	return &(r.Log[idx])
 }
 
 //
 //Removes all entries starting from index "idx"
 //
-func (r *RaftNode) RemoveLogEntry(idx int) {
+func (r *RaftNode) RemoveLogEntry(idx int32) {
 	r.stmu.Lock()
 	defer r.stmu.Unlock()
-	if len(r.Log)-1 > idx {
+	if len(r.Log)-1 > int(idx) {
 		r.Log = r.Log[:idx]
 	}
 	//persist \\todo

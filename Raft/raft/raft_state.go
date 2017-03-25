@@ -2,13 +2,13 @@ package raft
 
 //This file defines API to get/set raft persistent state
 
-func (r *RaftNode) getCurrentTerm() int {
+func (r *RaftNode) getCurrentTerm() int32 {
 	r.stmu.RLock()
 	defer r.stmu.RUnlock()
 	return r.CurrentTerm
 }
 
-func (r *RaftNode) setCurrentTerm(term int) {
+func (r *RaftNode) setCurrentTerm(term int32) {
 	r.stmu.Lock()
 	defer r.stmu.Unlock()
 	r.CurrentTerm = term

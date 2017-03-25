@@ -5,6 +5,7 @@ import (
 	"math/big"
 )
 
+/*
 type RaftState int
 
 const (
@@ -12,6 +13,7 @@ const (
 	CANDIDATE
 	LEADER
 )
+
 
 type NodeAddr struct {
 	Id   string
@@ -31,7 +33,7 @@ type Operation struct {
 	Key    string
 	Data   string
 }
-
+*/
 type Application interface {
 	ApplyOperation(op Operation) string
 }

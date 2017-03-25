@@ -17,21 +17,26 @@ type ElectionResultMsg struct {
 func (r *RaftNode) run_server() {
 	r.INF(" Server Starting\n")
 
+	//Set up network config
+	for _, n := range r.othersAddr {
+		r.netConfig.SetNetworkConfig(r.localAddr, *n, true)
+	}
+
 	//Kick of another go routine to apply any commited entries in the log
 	go r.UpdateSM()
 
 	//Main raft_server loop
 	for {
-		if r.nextState == FOLLOWER {
-			r.setState(FOLLOWER)
+		if r.nextState == RaftState_FOLLOWER {
+			r.setState(RaftState_FOLLOWER)
 			r.nextState = r.do_follower()
 			r.INF(" Follower State Exit\n")
-		} else if r.nextState == CANDIDATE {
-			r.setState(CANDIDATE)
+		} else if r.nextState == RaftState_CANDIDATE {
+			r.setState(RaftState_CANDIDATE)
 			r.nextState = r.do_candidate()
 			r.INF(" Candidate State Exit\n")
-		} else if r.nextState == LEADER {
-			r.setState(LEADER)
+		} else if r.nextState == RaftState_LEADER {
+			r.setState(RaftState_LEADER)
 			r.nextState = r.do_leader()
 			r.INF(" Leader State Exit\n")
 		} else {
@@ -49,6 +54,7 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 	rcvAppendEntries := false
 	for {
 		select {
+
 		case msg := <-r.appendEntriesMsgCh:
 			r.DBG(" Rcv on AppendEntriesMsgCh\n")
 			fallback := r.handleAppendEntries(msg)
@@ -65,10 +71,10 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 			//Do nothing
 		case <-r.makeElectionTimeout():
 			if rcvAppendEntries == true {
-				r.INF(" Rcv on ElecTO\n")
+				r.INF(" Follower Rcv on ElecTO\n")
 				rcvAppendEntries = false
 			} else {
-				return CANDIDATE
+				return RaftState_CANDIDATE
 			}
 		}
 	}
@@ -76,7 +82,7 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 
 //
 //This functions handles RPCs and other actions when raft server
-//is in CANDIDATE state
+//is in RaftState_CANDIDATE state
 //
 func (r *RaftNode) do_candidate() (nextState RaftState) {
 	r.INF(" Candidate State Term=%d\n", r.getCurrentTerm())
@@ -89,29 +95,31 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 		select {
 		case msg := <-r.appendEntriesMsgCh:
 			r.DBG(" Rcv on AppendEntriesMsgCh\n")
-			r.handleAppendEntries(msg)
+			if r.handleAppendEntries(msg) == true {
+				return RaftState_FOLLOWER
+			}
 		case msg := <-r.requestVoteMsgCh:
 			r.DBG(" Rcv on RequestVoteMsgCh\n")
 			if r.handleCandidateOrLeaderRequestVote(msg) == true {
-				return FOLLOWER
+				return RaftState_FOLLOWER
 			}
 		case <-r.appendEntriesReplyCh:
 			//Do nothing
 		case msg := <-r.requestVoteReplyCh:
 			if msg.Term > r.getCurrentTerm() {
 				r.setCurrentTerm(msg.Term)
-				return FOLLOWER
+				return RaftState_FOLLOWER
 			}
 			if msg.VoteGranted == true {
 				voteCnt++
-				r.INF(" Vote Resp, cnt=%d\n", voteCnt)
+				r.INF(" Vote Resp, cnt=%d\n", voteCnt, msg)
 				if voteCnt >= r.config.Majority {
-					return LEADER
+					return RaftState_LEADER
 				}
 			}
 		case <-r.makeElectionTimeout():
 			r.DBG(" Rcv on ElecTO\n")
-			return CANDIDATE
+			return RaftState_CANDIDATE
 		}
 	}
 }
@@ -125,44 +133,42 @@ func (r *RaftNode) do_leader() (nextState RaftState) {
 	r.matchIndex[r.localAddr] = 0
 	r.nextIndex[r.localAddr] = r.GetLastLogIndex() + 1
 	for _, n := range r.othersAddr {
-		if n != r.localAddr {
-			r.nextIndex[n] = r.GetLastLogIndex() + 1
-			r.matchIndex[n] = r.GetLastLogIndex()
+		if *n != r.localAddr {
+			r.nextIndex[*n] = r.GetLastLogIndex() + 1
+			r.matchIndex[*n] = r.GetLastLogIndex()
 		}
 	}
-	notMajorityCnt := 0
+	sendTimeout := r.makeHeartbeatTimeout()
+	fallback := make(chan bool)
+	sentToMajority := make(chan bool, 1)
+	sentToMajority <- true
+
 	for {
 		select {
 		case msg := <-r.appendEntriesMsgCh:
 			if r.handleAppendEntries(msg) == true {
-				return FOLLOWER
+				return RaftState_FOLLOWER
 			}
 		case msg := <-r.requestVoteMsgCh:
 			if r.handleCandidateOrLeaderRequestVote(msg) == true {
-				return FOLLOWER
+				return RaftState_FOLLOWER
 			}
 		case <-r.appendEntriesReplyCh:
-			//\TODO
+			r.INF(" Leader Heard on appendEntriesReplyCh")
 		case <-r.requestVoteReplyCh:
+			r.INF(" Leader Heard on requestVoteReplyCh")
 			//Do nothing
-		case <-r.makeHeartbeatTimeout():
-			fallBack, sentToMajority := r.sendHeartBeats()
-			if fallBack == true {
-				return FOLLOWER
+		case <-sendTimeout:
+			select {
+			case <-sentToMajority:
+				r.sendHeartBeats(fallback, sentToMajority)
+				sendTimeout = r.makeHeartbeatTimeout()
+			default:
+				sendTimeout = time.After(time.Millisecond * 1)
 			}
 
-			//If HeartBeat was sent to a majority in timeout period,
-			//then everything is ok and continue to be leader.
-			//However, if leader is partiioned and heartbeats weren't sent successfully
-			//to majorty for heartbeat period, then step-down
-			if sentToMajority == true {
-				notMajorityCnt = 0
-			} else {
-				notMajorityCnt++
-			}
-			if notMajorityCnt == 2 {
-				return FOLLOWER
-			}
+		case <-fallback:
+			return RaftState_FOLLOWER
 		}
 
 		//Update Commit Index
@@ -175,21 +181,23 @@ func (r *RaftNode) do_leader() (nextState RaftState) {
 //waits for the response and then forwards it to the server main-loop
 //
 func (r *RaftNode) requestVotes() {
-	r.DBG(" Starting Election\n")
+	r.INF(" Starting Election\n")
 	args := RequestVoteArgs{}
+	args.FromNode = &r.localAddr
 	args.Term = r.getCurrentTerm()
 	args.CandidateId = r.Id
 	args.LastLogIdx = r.GetLastLogIndex()
 	args.LastLogTerm = r.GetLogEntry(args.LastLogIdx).Term
 	for _, n := range r.othersAddr {
-		if n != r.localAddr {
+		if *n != r.localAddr {
 			go func(n NodeAddr) {
-				reply := &RequestVoteReply{}
-				err := r.RequestVoteRPC(&n, args, reply)
+				//reply := &RequestVoteReply{}
+				r.INF(" Send ReqVote to %v\n", n.Id)
+				reply, err := r.RequestVoteRPC(&n, args)
 				if err == nil {
 					r.requestVoteReplyCh <- *reply
 				}
-			}(n)
+			}(*n)
 		}
 	}
 	return
@@ -200,74 +208,75 @@ func (r *RaftNode) requestVotes() {
 //If a follower is up to date, then it simply send appendEntries
 //with no entries(empty). Otherwise, it sends the follower the
 //newer entries
-func (r *RaftNode) sendHeartBeats() (fallBack, sentToMajority bool) {
-	r.DBG(" Send Heartbeats Enter\n")
+func (r *RaftNode) sendHeartBeats(fallBack chan bool, sentToMajority chan bool) {
+	go func() {
+		r.INF(" Send Heartbeats Enter\n")
 
-	term := r.getCurrentTerm()
-	successCnt := 1
-	r.matchIndex[r.localAddr] = r.GetLastLogIndex()
+		term := r.getCurrentTerm()
+		successCnt := 1
+		r.matchIndex[r.localAddr] = r.GetLastLogIndex()
+		nodes := r.othersAddr
 
-	for _, n := range r.othersAddr {
-		if n != r.localAddr {
-			req := AppendEntriesArgs{}
-			req.Term = term
-			req.LeaderId = r.Id
-			reply := &AppendEntriesReply{}
-			req.PrevLogIdx = r.nextIndex[n] - 1
-			req.PrevLogTerm = r.GetLogEntry(r.nextIndex[n] - 1).Term
-			if r.GetLastLogIndex() >= r.nextIndex[n] {
-				r.DBG(" AppendEntries[%d] PrevLogIdx:%d\n", n, req.PrevLogIdx)
-				req.Entries = make([]LogEntry, r.GetLastLogIndex()-r.nextIndex[n]+1)
-				for i, j := r.nextIndex[n], 0; i <= r.GetLastLogIndex(); i, j = i+1, j+1 {
-					req.Entries[j] = r.GetLogEntry(i)
-				}
-			} else {
-				req.Entries = nil
+		for _, pn := range nodes {
+			n := *pn
+			if r.getState() != RaftState_LEADER {
+				return
 			}
-			req.LeaderCommit = r.commitIndex
-
-			err := r.AppendEntriesRPC(&n, req, reply)
-			if err == nil {
-				if reply.Term > r.getCurrentTerm() {
-					r.setCurrentTerm(reply.Term)
-					fallBack = true
-					sentToMajority = false
-					r.DBG(" Send Heartbeats Exit %v %v\n", fallBack, sentToMajority)
-					return fallBack, sentToMajority
-				}
-				if reply.Success == true {
-					successCnt++
-					r.nextIndex[n] = req.PrevLogIdx + len(req.Entries) + 1
-					r.matchIndex[n] = req.PrevLogIdx + len(req.Entries)
-				} else {
-					if r.nextIndex[n] > 1 {
-						r.nextIndex[n]--
+			if n != r.localAddr {
+				req := AppendEntriesArgs{}
+				req.FromNode = &r.localAddr
+				req.Term = term
+				req.LeaderId = r.Id
+				//			reply := &AppendEntriesReply{}
+				req.PrevLogIdx = r.nextIndex[n] - 1
+				req.PrevLogTerm = r.GetLogEntry(r.nextIndex[n] - 1).Term
+				if r.GetLastLogIndex() >= r.nextIndex[n] {
+					r.DBG(" AppendEntries[%d] PrevLogIdx:%d\n", n, req.PrevLogIdx)
+					req.Entries = make([]*LogEntry, r.GetLastLogIndex()-r.nextIndex[n]+1)
+					for i, j := r.nextIndex[n], 0; i <= r.GetLastLogIndex(); i, j = i+1, j+1 {
+						req.Entries[j] = r.GetLogEntry(i)
 					}
+				} else {
+					req.Entries = nil
+				}
+				req.LeaderCommit = r.commitIndex
+
+				r.INF(" Send AE to %v\n", n.Id)
+				reply, err := r.AppendEntriesRPC(&n, req)
+				if err == nil {
+					if reply.Term > r.getCurrentTerm() {
+						r.setCurrentTerm(reply.Term)
+						fallBack <- true
+						sentToMajority <- false
+					}
+					if reply.Success == true {
+						successCnt++
+						r.nextIndex[n] = req.PrevLogIdx + int32(len(req.Entries)) + 1
+						r.matchIndex[n] = req.PrevLogIdx + int32(len(req.Entries))
+					} else {
+						if r.nextIndex[n] > 1 {
+							r.nextIndex[n]--
+						}
+					}
+				} else {
+					r.INF("Error sending AET to %v", n.Id)
 				}
 			}
 		}
-	}
-	if successCnt >= r.config.Majority {
-		fallBack = false
-		sentToMajority = true
-	} else {
-		fallBack = false
-		sentToMajority = false
-	}
-
-	r.DBG(" Send Heartbeats Exit %v %v\n", fallBack, sentToMajority)
-	return fallBack, sentToMajority
+		sentToMajority <- true
+		r.INF(" Send Heartbeats Exit \n")
+	}()
 }
 
 // This function creates timer channel with random timeout.
 func (r *RaftNode) makeElectionTimeout() <-chan time.Time {
 	val := rand.Int()
-	val = val + 100*rand.Int()
-	if val < 0 {
-		val *= -1
-	}
-	to := (val % r.config.ElectionTimeout) + r.config.ElectionTimeout
-	r.INF("ElectionTimeout=%d\n", to)
+	//	val = val + 100*rand.Int()
+	//	if val < 0 {
+	//		val *= -1
+	//	}
+	to := (val % r.config.ElectionTimeout) + r.config.ElectionTimeoutBase
+	//	r.INF("ElectionTimeout=%d\n", to)
 	return time.After(time.Duration(to) * time.Millisecond)
 }
 
@@ -278,7 +287,7 @@ func (r *RaftNode) makeHeartbeatTimeout() <-chan time.Time {
 
 //Period for UpdateSM go routine to be woken up
 func (r *RaftNode) makeUpdateSMPeriod() <-chan time.Time {
-	return time.After(time.Duration(10) * time.Millisecond)
+	return time.After(time.Duration(100) * time.Millisecond)
 }
 
 //
@@ -287,14 +296,14 @@ func (r *RaftNode) makeUpdateSMPeriod() <-chan time.Time {
 func (r *RaftNode) handleAppendEntries(msg AppendEntriesMsg) bool {
 	retVal := false
 	reply := AppendEntriesReply{}
-	r.DBG(" handleAppendEntries Enter\n")
+	r.INF(" handleAppendEntries Enter\n")
 	r.DBG(" 	Term=%d, NumEnt=%d, LeadId=%d, PrevLogIdx=%d,PrevLogTerm=%d,LeadCom=%d\n", msg.args.Term, len(msg.args.Entries),
 		msg.args.LeaderId, msg.args.PrevLogIdx, msg.args.PrevLogTerm, msg.args.LeaderCommit)
 
 	//Update our term if greater than the current term
 	if msg.args.Term > r.getCurrentTerm() {
 		r.setCurrentTerm(msg.args.Term)
-		if r.state != FOLLOWER {
+		if r.state != RaftState_FOLLOWER {
 			retVal = true
 		}
 	}
@@ -351,7 +360,7 @@ func (r *RaftNode) handleAppendEntries(msg AppendEntriesMsg) bool {
 	reply.Term = r.getCurrentTerm()
 	reply.Success = true
 	msg.reply <- reply
-	r.DBG(" handleAppendEntries Exit, reply=%v\n", reply)
+	r.INF(" handleAppendEntries Exit, reply=%v\n", reply)
 	return retVal
 }
 
@@ -359,7 +368,7 @@ func (r *RaftNode) handleAppendEntries(msg AppendEntriesMsg) bool {
 //handleRequestVote
 //
 func (r *RaftNode) handleRequestVote(msg RequestVoteMsg) {
-	r.DBG(" Handler Request Vote Enter\n")
+	r.INF("Request Vote Enter from %v\n", msg.args.CandidateId)
 	reply := RequestVoteReply{}
 
 	if r.getCurrentTerm() > msg.args.Term {
@@ -390,7 +399,7 @@ func (r *RaftNode) handleRequestVote(msg RequestVoteMsg) {
 	//Send Reply on the channel
 	reply.Term = r.getCurrentTerm()
 	msg.reply <- reply
-	r.DBG(" Handler Request Vote Exit\n")
+	r.INF("Request Vote Exit\n")
 }
 
 //
@@ -399,13 +408,13 @@ func (r *RaftNode) handleRequestVote(msg RequestVoteMsg) {
 //
 func (r *RaftNode) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	// TODO: Students should implement this method
-	r.INF(" Handler Competing Request Vote Enter \n")
+	r.INF("Competing Request Vote Enter %v\n", msg.args.CandidateId)
 	retVal := false
 	reply := RequestVoteReply{}
 	if r.getCurrentTerm() > msg.args.Term {
 		reply.VoteGranted = false
 		r.INF("Term Greated VoteGranted=False\n")
-		if r.state != FOLLOWER {
+		if r.state != RaftState_FOLLOWER {
 			retVal = true
 		}
 	} else {
@@ -437,7 +446,7 @@ func (r *RaftNode) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	//Send Reply on the channel
 	reply.Term = r.getCurrentTerm()
 	msg.reply <- reply
-	r.DBG(" Handler Competing Request Vote Exit\n")
+	r.INF(" Handler Competing Request Vote Exit\n")
 	return retVal
 }
 
@@ -466,7 +475,7 @@ func (r *RaftNode) UpdateCommitIdx() {
 	var mIdx []int
 	mIdx = make([]int, 0, len(r.matchIndex))
 	for _, v := range r.matchIndex {
-		mIdx = append(mIdx, v)
+		mIdx = append(mIdx, int(v))
 	}
 	sort.Ints(mIdx)
 
@@ -479,8 +488,8 @@ func (r *RaftNode) UpdateCommitIdx() {
 		}
 	}
 	r.DBG("			 Updt CommitIdx N=%d, mIdx=%v\n", N, mIdx)
-	if (r.Log[N].Term == r.CurrentTerm) && r.commitIndex < N {
-		r.commitIndex = N
+	if (r.Log[N].Term == r.CurrentTerm) && r.commitIndex < int32(N) {
+		r.commitIndex = int32(N)
 		r.DBG("		 Updt CommitIdx: %d\n", r.commitIndex)
 	}
 }

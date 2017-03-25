@@ -14,7 +14,7 @@ func CreateListener(port int) (net.Listener, error) {
 	}
 
 	addr := fmt.Sprintf("%v:%v", hostname, port)
-	conn, err := net.Listen("tcp4", addr)
+	conn, err := net.Listen("tcp", addr)
 
 	return conn, err
 }

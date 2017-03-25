@@ -55,7 +55,11 @@ func (nm *NodeManager) Run() {
 		nm.INF("Node[%d]=[%v] %v\n", i, n.Id, n.Addr)
 	}
 
-	if nm.TestBasicElection() == false {
+	//if nm.TestBasicElection() == false {
+	//	nm.IdleLoop()
+	//}
+
+	if nm.TestReElection() == false {
 		nm.IdleLoop()
 	}
 
@@ -63,7 +67,6 @@ func (nm *NodeManager) Run() {
 
 func (nm *NodeManager) IdleLoop() {
 	for {
-		//Run tests
 	}
 }
 
@@ -72,8 +75,8 @@ func (nm *NodeManager) TestBasicElection() bool {
 	//Only one node should be leader
 
 	time.Sleep(1000 * time.Millisecond)
-	if nm.checkOneLeader() == false {
-		nm.INF("FAIL: More than one leader")
+	if ok, _ := nm.checkOneLeader(); !ok {
+		nm.INF("FAIL: More than one leader or no leader")
 		return false
 	}
 	//Get state
@@ -82,13 +85,41 @@ func (nm *NodeManager) TestBasicElection() bool {
 	return true
 }
 
-func (nm *NodeManager) TestReElection() {
-	//Get state
+func (nm *NodeManager) TestReElection() bool {
+	nm.INF("Test Reelection")
+
 	//check only one leader, and get current leader1
+	time.Sleep(1000 * time.Millisecond)
+	var leader1 NodeAddr
+	var leader2 NodeAddr
+	var leader NodeAddr
+	var ok bool
+	if ok, leader1 = nm.checkOneLeader(); !ok {
+		nm.INF("FAIL: More than one leader or no leader")
+		return false
+	}
 	//disconnect(leader1)
 	//check only one leader, and get current leader2
 	//connect(leader1) //old leader
 	//check only one leader and that it's still leader2
+	nm.disconnect(&leader1)
+	time.Sleep(2000 * time.Millisecond)
+	if ok, leader2 = nm.checkOneLeader(); !ok {
+		nm.INF("FAIL: More than one leader or no leader")
+		return false
+	}
+	if leader2 == leader1 {
+		nm.INF("FAIL: Leader1 is still leader")
+	}
+	nm.connect(&leader1)
+	if ok, leader = nm.checkOneLeader(); !ok {
+		nm.INF("FAIL: More than one leader or no leader")
+		return false
+	}
+	if leader2 != leader {
+		nm.INF("FAIL: Old leader reconnect affected currn leader")
+		return false
+	}
 
 	//disconnect(leader2)
 	//disconnect(leader2+1%clusterSize)
@@ -99,6 +130,9 @@ func (nm *NodeManager) TestReElection() {
 
 	//connect(leader2)
 	//check only one leader, and it's still leader2+1%clusterSize)
+
+	nm.INF("Test ReElection PASSED!\n\n")
+	return true
 }
 
 func (nm *NodeManager) TestBasicAgree() {
@@ -118,23 +152,25 @@ func (nm *NodeManager) TestRejoin() {
 //If terms for each node don't match, then fail
 
 //checkOneLeader
-func (nm *NodeManager) checkOneLeader() bool {
+func (nm *NodeManager) checkOneLeader() (bool, NodeAddr) {
 	cnt := 0
+	var leader NodeAddr
 	for _, n := range nm.serversAddr {
 		if nm.connState[n] == true {
 			//Get state
-			err, state := GetStateRPC(&n)
-			if err == nil && state == LEADER {
+			state, err := GetStateRPC(&n)
+			if err == nil && state == RaftState_LEADER {
 				cnt++
+				leader = n
 			}
 		}
 	}
 	//Check that only one node is a leader
 	if cnt != 1 {
 		nm.INF("Leader Cnt=%d\n", cnt)
-		return false
+		return false, leader
 	} else {
-		return true
+		return true, leader
 	}
 }
 
@@ -148,6 +184,19 @@ func (nm *NodeManager) checkOneLeader() bool {
 
 //connect(NodeAddr)
 //EnableNodeRPC
+func (nm *NodeManager) connect(s *NodeAddr) {
+	err := EnableNodeRPC(s)
+	if err != nil {
+
+	}
+}
 
 //disconnect
 //DisableNodeRPC
+func (nm *NodeManager) disconnect(s *NodeAddr) {
+	err := DisableNodeRPC(s)
+	if err != nil {
+
+	}
+
+}
