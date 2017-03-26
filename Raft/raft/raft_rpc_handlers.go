@@ -84,6 +84,40 @@ func (r *RaftNode) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesRe
 	return nil
 }
 
+// Client Register RPC handler.
+//
+//ClientRegisterMSG structure to wrap up an incoming RPC msg
+type ClientRegisterMsg struct {
+	args  ClientRegisterArgs
+	reply chan ClientRegisterReply
+}
+
+func (r *RaftNode) ClientRegister(args *ClientRegisterArgs, reply *ClientRegisterReply) error {
+	r.INF("ClientRegister Enter")
+	replyCh := make(chan ClientRegisterReply)
+	r.clientRegisterMsgCh <- ClientRegisterMsg{*args, replyCh}
+	*reply = <-replyCh
+	r.INF("ClientRegister Exit")
+	return nil
+}
+
+// Client Request RPC handler.
+//
+//ClientRequest MSG structure to wrap up an incoming RPC msg
+type ClientRequestMsg struct {
+	args  ClientRequestArgs
+	reply chan ClientReply
+}
+
+func (r *RaftNode) ClientRequest(args *ClientRequestArgs, reply *ClientReply) error {
+	r.INF("ClientRequest Enter")
+	replyCh := make(chan ClientReply)
+	r.clientRequestMsgCh <- ClientRequestMsg{*args, replyCh}
+	*reply = <-replyCh
+	r.INF("ClientRequest Exit")
+	return nil
+}
+
 //GetTerm
 func (r *RaftNode) GetTerm(req *GetTermRequest, reply *GetTermReply) error {
 	r.mu.Lock()

@@ -61,11 +61,19 @@ func (s *RaftRPCWrapper) AppendEntriesRPC(ctx context.Context, req *AppendEntrie
 	return &reply, err
 }
 
+//ClientRegisterRequestWrapper
+func (s *RaftRPCWrapper) ClientRegisterRequestRPC(ctx context.Context, req *ClientRegisterArgs) (*ClientRegisterReply, error) {
+	var reply ClientRegisterReply
+	var err error
+	err = s.node.ClientRegister(req, &reply)
+	return &reply, err
+}
+
 //ClientRequestWrapper
-func (s *RaftRPCWrapper) ClientRequestRPC(context.Context, *ClientRequest) (*ClientReply, error) {
+func (s *RaftRPCWrapper) ClientRequestRPC(ctx context.Context, req *ClientRequestArgs) (*ClientReply, error) {
 	var reply ClientReply
 	var err error
-	//	err := s.node.ClientRequest(req, reply)
+	err = s.node.ClientRequest(req, &reply)
 	return &reply, err
 }
 

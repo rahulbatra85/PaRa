@@ -7,9 +7,10 @@ package raft
 
 import (
 	"fmt"
+	"net"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"net"
 	//"net/rpc"
 	"os"
 	"sync"
@@ -48,14 +49,20 @@ type RaftNode struct {
 	//Volatile state on leaders
 	nextIndex  map[NodeAddr]int32
 	matchIndex map[NodeAddr]int32
+	leaderNode NodeAddr
 
 	//channels
 	appendEntriesMsgCh   chan AppendEntriesMsg
 	requestVoteMsgCh     chan RequestVoteMsg
 	appendEntriesReplyCh chan AppendEntriesReply
 	requestVoteReplyCh   chan RequestVoteReply
+	clientRegisterMsgCh  chan ClientRegisterMsg
+	clientRequestMsgCh   chan ClientRequestMsg
 
 	//Application State
+	app              *KVApp
+	clientAppliedMap map[int32]ClientReply
+	clientRequestMap map[int32]ClientRequestMsg
 }
 
 func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config *RaftConfig) (pr *RaftNode) {
@@ -77,12 +84,17 @@ func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config 
 	r.state = RaftState_FOLLOWER
 	r.CurrentTerm = 0
 	r.VotedFor = ""
+	r.app = MakeKVApp()
+	r.clientAppliedMap = make(map[int32]ClientReply)
+	r.clientRequestMap = make(map[int32]ClientRequestMsg)
 
 	//Init channels
 	r.appendEntriesMsgCh = make(chan AppendEntriesMsg)
 	r.requestVoteMsgCh = make(chan RequestVoteMsg)
 	r.appendEntriesReplyCh = make(chan AppendEntriesReply)
 	r.requestVoteReplyCh = make(chan RequestVoteReply)
+	r.clientRegisterMsgCh = make(chan ClientRegisterMsg)
+	r.clientRequestMsgCh = make(chan ClientRequestMsg)
 
 	if nodeMgrAddr != nil {
 		r.nodeMgrAddr = *nodeMgrAddr

@@ -14,7 +14,8 @@ service RaftRPC {
   	rpc StartRPC (StartRequest) returns (StartReply) {}
 	rpc RequestVoteRPC (RequestVoteArgs) returns(RequestVoteReply) {}
 	rpc AppendEntriesRPC (AppendEntriesArgs) returns(AppendEntriesReply) {}
-	rpc ClientRequestRPC (ClientRequest) returns(ClientReply) {}
+	rpc ClientRequestRPC (ClientRequestArgs) returns(ClientReply) {}
+	rpc ClientRegisterRequestRPC (ClientRegisterArgs) returns(ClientRegisterReply) {}
 	rpc GetTermRPC (GetTermRequest) returns (GetTermReply) {}
  	rpc GetStateRPC (GetStateRequest) returns(GetStateReply) {}
     rpc EnableNodeRPC(EnableNodeRequest) returns(EnableNodeReply) {}
@@ -31,6 +32,19 @@ enum RaftState {
 	LEADER = 2;
 }
 
+enum OpType {
+	CLIENT_REGISTRATION = 0;
+	GET = 1;
+	PUT = 2;
+}
+
+enum ClientReplyCode {
+	REQUEST_FAILED = 0;
+	REQUEST_SUCCESSFUL = 1;
+	RETRY = 2;
+	NOT_LEADER = 3;
+}
+
 //Node Addr
 message NodeAddr {
   	string Addr = 1;
@@ -38,23 +52,20 @@ message NodeAddr {
 }
 
 message Command {
- 	NodeAddr	ClientNodeAddr = 1;
-	int32 		Cid = 2;
-	int32 		SeqNum = 3;       
-	Operation 	Op = 4;             
+	int32 		ClientId  = 1;
+	uint64 		SeqNum = 2;       
+	Operation 	Op = 3;             
 }
 
 message Operation {
-	string  OpType = 1; 
+	OpType  Type = 1; 
 	string  Key = 2;    
- 	string	Data = 3;   
+ 	string	Value = 3;   
 }
 
 message LogEntry {
-	int32 Term = 1;
+	int32 	Term = 1;
 	Command Cmd = 2;
-	int32 ClientId = 3;
-	int32 ClientSeqNum = 4;
 }
 
 //Join Request
@@ -161,11 +172,25 @@ message SetNodetoNodeReply  {
 //Client
 /////////////////////////////////////////
 
+//Register
+message ClientRegisterArgs {
+	NodeAddr FromNode = 1;
+}
+
+message ClientRegisterReply {
+	ClientReplyCode Code = 1;
+	int32 ClientId = 2;
+	NodeAddr LeaderNode = 3;
+}
+
 //Request
-message ClientRequest {
+message ClientRequestArgs {
 	Command Cmd = 1;
 }
 
 message ClientReply {
-	bool Success = 1;
+	ClientReplyCode  Code = 1;
+	NodeAddr LeaderNode = 2;
+	string Value = 3;
+	uint64 SeqNum = 4;
 }

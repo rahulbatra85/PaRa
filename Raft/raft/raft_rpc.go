@@ -2,16 +2,24 @@ package raft
 
 import (
 	"fmt"
+
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	//"net"
 	//"net/rpc"
-	//"time"
+	"time"
 )
 
 //RPC client connection map
-var replicaClient = make(map[string]RaftRPCClient)
-var replicaConn = make(map[string]*grpc.ClientConn)
+var rClientsMap = make(map[string]*rClient)
+
+//var replicaConn = make(map[string]*grpc.ClientConn)
+
+type rClient struct {
+	rpcClient RaftRPCClient
+	conn      *grpc.ClientConn
+	cnt       int
+}
 
 //JoinRPC
 func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
@@ -75,19 +83,34 @@ func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs)
 		r.INF("AppEntries send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
 	}
+	var err error
+	var reply *AppendEntriesReply
 	client, err := getClient(remoteNode)
 	if err != nil {
 		return nil, err
 	}
-	return client.AppendEntriesRPC(context.Background(), &req, grpc.FailFast(true))
+	reply, err = client.AppendEntriesRPC(context.Background(), &req, grpc.FailFast(true))
+	if err != nil {
+		return nil, err
+	}
+	return reply, nil
 }
 
 /////////////////////////////////////////
 //Client
 /////////////////////////////////////////
 
+//Register Client
+func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*ClientRegisterReply, error) {
+	client, err := getClient(remoteNode)
+	if err != nil {
+		return nil, err
+	}
+	return client.ClientRegisterRequestRPC(context.Background(), &request)
+}
+
 //Request
-func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequest) (*ClientReply, error) {
+func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientReply, error) {
 	client, err := getClient(remoteNode)
 	if err != nil {
 		return nil, err
@@ -164,20 +187,29 @@ func SetNodetoNodeRPC(remoteNode *NodeAddr, n NodeAddr, val bool) error {
 }
 
 func getClient(remoteAddr *NodeAddr) (RaftRPCClient, error) {
-	client, ok := replicaClient[remoteAddr.Addr]
+	rc, ok := rClientsMap[remoteAddr.Addr]
 	if !ok {
-		conn, err := grpc.Dial(remoteAddr.Addr, grpc.WithInsecure())
+		conn, err := grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
 		if err != nil {
 			return nil, err
 		}
-		client = NewRaftRPCClient(conn)
-		replicaClient[remoteAddr.Addr] = client
-		replicaConn[remoteAddr.Addr] = conn
+		rc = &rClient{}
+		rc.rpcClient = NewRaftRPCClient(conn)
+		rc.conn = conn
+		rc.cnt = 0
+		rClientsMap[remoteAddr.Addr] = rc
+	} else if rc.cnt > 25 {
+		fmt.Printf("Closing Connection to %s", remoteAddr.Addr)
+		rc.conn.Close()
+		conn, err := grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
+		if err != nil {
+			return nil, err
+		}
+		rc.rpcClient = NewRaftRPCClient(conn)
+		rc.conn = conn
+		rc.cnt = 0
+		rClientsMap[remoteAddr.Addr] = rc
 	}
-	return client, nil
-}
-
-func closeClient(remoteAddr *NodeAddr) {
-	//	client, ok := replicaClient[remoteAddr.Addr]
-
+	rc.cnt++
+	return rc.rpcClient, nil
 }
