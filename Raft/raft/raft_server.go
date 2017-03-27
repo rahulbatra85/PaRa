@@ -23,7 +23,7 @@ func (r *RaftNode) run_server() {
 	}
 
 	//Kick of another go routine to apply any commited entries in the log
-	go r.UpdateSM()
+	//	go r.UpdateSM()
 
 	//Main raft_server loop
 	for {
@@ -41,6 +41,8 @@ func (r *RaftNode) run_server() {
 			r.INF(" Leader State Exit\n")
 		} else {
 			//fatal error
+			r.ERR("FATAL: Raft in INVALID State")
+			return
 		}
 	}
 }
@@ -50,8 +52,8 @@ func (r *RaftNode) run_server() {
 //is in FOLLOWER state
 //
 func (r *RaftNode) do_follower() (nextState RaftState) {
-	r.INF(" Follower State Enter Term=%d\n", r.getCurrentTerm())
-	rcvAppendEntries := false
+	r.DBG(" Follower State Enter Term=%d\n", r.getCurrentTerm())
+	electionCh := r.makeElectionTimeout()
 	for {
 		select {
 
@@ -64,24 +66,21 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 			fallback := r.handleAppendEntries(msg)
 			if fallback != true {
 				r.leaderNode = *msg.args.FromNode
-				r.INF(" From Leader \n")
+				r.DBG(" From Leader \n")
 				r.UpdateSM()
-				rcvAppendEntries = true
 			}
+			electionCh = r.makeElectionTimeout()
 		case msg := <-r.requestVoteMsgCh:
-			r.INF(" Rcv on RequestVoteMsgCh\n")
+			r.DBG(" Rcv on RequestVoteMsgCh\n")
 			r.handleRequestVote(msg)
+			electionCh = r.makeElectionTimeout()
 		case <-r.appendEntriesReplyCh:
 			//Do nothing
 		case <-r.requestVoteReplyCh:
 			//Do nothing
-		case <-r.makeElectionTimeout():
-			if rcvAppendEntries == true {
-				r.INF(" Follower Rcv on ElecTO\n")
-				rcvAppendEntries = false
-			} else {
-				return RaftState_CANDIDATE
-			}
+		case <-electionCh:
+			r.DBG(" Follower Rcv on ElecTO\n")
+			return RaftState_CANDIDATE
 		}
 	}
 }
@@ -91,7 +90,7 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 //is in RaftState_CANDIDATE state
 //
 func (r *RaftNode) do_candidate() (nextState RaftState) {
-	r.INF(" Candidate State Term=%d\n", r.getCurrentTerm())
+	r.DBG(" Candidate State Term=%d\n", r.getCurrentTerm())
 	r.setCurrentTerm(r.getCurrentTerm() + 1)
 	r.setVotedFor(r.Id)
 	voteCnt := 1
@@ -124,13 +123,13 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 			}
 			if msg.VoteGranted == true {
 				voteCnt++
-				r.INF(" Vote Resp, cnt=%d\n", voteCnt, msg)
+				r.DBG(" Vote Resp, cnt=%d\n", voteCnt, msg)
 				if voteCnt >= r.config.Majority {
 					return RaftState_LEADER
 				}
 			}
 		case <-r.makeElectionTimeout():
-			r.INF(" Rcv on ElecTO\n")
+			r.DBG(" Rcv on ElecTO\n")
 			return RaftState_CANDIDATE
 		}
 	}
@@ -179,9 +178,9 @@ func (r *RaftNode) do_leader() (nextState RaftState) {
 				return RaftState_FOLLOWER
 			}
 		case <-r.appendEntriesReplyCh:
-			r.INF(" Leader Heard on appendEntriesReplyCh")
+			r.DBG(" Leader Heard on appendEntriesReplyCh")
 		case <-r.requestVoteReplyCh:
-			r.INF(" Leader Heard on requestVoteReplyCh")
+			r.DBG(" Leader Heard on requestVoteReplyCh")
 		case msg := <-r.clientRequestMsgCh:
 			r.handleClientRequest(msg)
 		case msg := <-r.clientRegisterMsgCh:
@@ -207,7 +206,7 @@ func (r *RaftNode) requestVotes() {
 		if *n != r.localAddr {
 			go func(n NodeAddr) {
 				//reply := &RequestVoteReply{}
-				r.INF(" Send ReqVote to %v\n", n.Id)
+				r.DBG(" Send ReqVote to %v\n", n.Id)
 				//reply, err := r.RequestVoteRPC(&n, args)
 				reply, err := RequestVoteRPC(&n, args)
 				if err == nil {
@@ -415,7 +414,7 @@ func (r *RaftNode) handleRequestVote(msg RequestVoteMsg) {
 	//Send Reply on the channel
 	reply.Term = r.getCurrentTerm()
 	msg.reply <- reply
-	r.INF("Request Vote Exit\n")
+	r.INF("Request Vote Exit. Vote Granted=%v\n", reply.VoteGranted)
 }
 
 //
@@ -428,7 +427,7 @@ func (r *RaftNode) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	reply := RequestVoteReply{}
 	if r.getCurrentTerm() > msg.args.Term {
 		reply.VoteGranted = false
-		r.INF("Term Greated VoteGranted=False\n")
+		r.DBG("Term Greated VoteGranted=False\n")
 		if r.state != RaftState_FOLLOWER {
 			retVal = true
 		}
@@ -461,7 +460,7 @@ func (r *RaftNode) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	//Send Reply on the channel
 	reply.Term = r.getCurrentTerm()
 	msg.reply <- reply
-	r.INF(" Handler Competing Request Vote Exit\n")
+	r.INF(" Handler Competing Request Vote Exit. VoteGranted=%v\n", reply.VoteGranted)
 	return retVal
 }
 
@@ -479,7 +478,7 @@ func (r *RaftNode) handleClientRegister(msg ClientRegisterMsg) {
 		entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: cmd}
 		r.AppendLog(entry)
 		r.clientRegisterMap[r.GetLastLogIndex()] = msg
-		r.INF("ClientRegistration AppendLog")
+		r.DBG("ClientRegistration AppendLog")
 	}
 }
 
@@ -501,30 +500,30 @@ func (r *RaftNode) handleClientRequest(msg ClientRequestMsg) {
 				entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: msg.args.Cmd}
 				r.AppendLog(entry)
 				r.clientRequestMap[r.GetLastLogIndex()] = msg
-				r.INF("ClientRequest Appended")
+				r.DBG("ClientRequest Appended")
 			} else {
 				if msg.args.Cmd.SeqNum == replyEntry.SeqNum {
 					//Reply REQUEST_SUCCESSFUL
 					reply := ClientReply{Code: ClientReplyCode_REQUEST_SUCCESSFUL, LeaderNode: &r.leaderNode, Value: replyEntry.Value}
 					msg.reply <- reply
-					r.INF("Client Request Replayed")
+					r.DBG("Client Request Replayed")
 				} else if msg.args.Cmd.SeqNum > replyEntry.SeqNum {
 					//appendLogEntry
 					entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: msg.args.Cmd}
 					r.AppendLog(entry)
 					r.clientRequestMap[r.GetLastLogIndex()] = msg
-					r.INF("ClientRequest Appended")
+					r.DBG("ClientRequest Appended")
 				} else {
 					reply := ClientReply{Code: ClientReplyCode_REQUEST_FAILED, LeaderNode: &r.leaderNode, Value: ""}
 					msg.reply <- reply
-					r.INF("ClientRequest Bad")
+					r.DBG("ClientRequest Bad")
 				}
 			}
 		} else {
 			//REQUEST_FAILED
 			reply := ClientReply{Code: ClientReplyCode_REQUEST_FAILED, LeaderNode: &r.leaderNode, Value: ""}
 			msg.reply <- reply
-			r.INF("ClientRequest NOT Registered")
+			r.DBG("ClientRequest NOT Registered")
 		}
 	}
 }
@@ -539,13 +538,13 @@ func (r *RaftNode) UpdateSM() {
 		entry := r.GetLogEntry(r.lastApplied)
 		cmd := *entry.Cmd
 		if cmd.Op.Type == OpType_CLIENT_REGISTRATION {
-			r.INF("SM: ClientRegistration Applied")
+			r.DBG("SM: ClientRegistration Applied")
 			reply := ClientRegisterReply{}
 			reply.ClientId = r.lastApplied
 			reply.LeaderNode = &r.localAddr
 			reply.Code = ClientReplyCode_REQUEST_SUCCESSFUL
 			if msg, ok := r.clientRegisterMap[r.lastApplied]; ok {
-				r.INF("Replying to ClientRegister")
+				r.DBG("Replying to ClientRegister")
 				msg.reply <- reply
 				delete(r.clientRegisterMap, r.lastApplied)
 			}
@@ -555,7 +554,7 @@ func (r *RaftNode) UpdateSM() {
 			if err != nil {
 				reply.Code = ClientReplyCode_REQUEST_FAILED
 			} else {
-				r.INF("SM: ClientRequest Applied")
+				r.DBG("SM: ClientRequest Applied")
 				reply.Code = ClientReplyCode_REQUEST_SUCCESSFUL
 			}
 			reply.LeaderNode = &r.leaderNode
@@ -563,7 +562,7 @@ func (r *RaftNode) UpdateSM() {
 			reply.Value = value
 			r.clientAppliedMap[entry.Cmd.ClientId] = reply
 			if msg, ok := r.clientRequestMap[r.lastApplied]; ok {
-				r.INF("Replying to client")
+				r.DBG("Replying to client")
 				msg.reply <- reply
 				delete(r.clientRequestMap, r.lastApplied)
 			}

@@ -55,10 +55,10 @@ type RequestVoteMsg struct {
 //It then forwards to the run_server go routine through requestVoteMsgCh. And waits
 //on replyCh before responding back to the callee server
 func (r *RaftNode) RequestVote(args *RequestVoteArgs) (RequestVoteReply, error) {
-	r.INF("ReqVote Hdl Enter")
+	r.DBG("ReqVote Hdl Enter")
 	replyCh := make(chan RequestVoteReply)
 	r.requestVoteMsgCh <- RequestVoteMsg{args, replyCh}
-	r.INF("ReqVote Hdl Exit")
+	r.DBG("ReqVote Hdl Exit")
 	return <-replyCh, nil
 }
 
@@ -75,10 +75,10 @@ type AppendEntriesMsg struct {
 //It then forwards to the local "run_server" go routine through appendEntriesMsgCh . And waits
 //on replyCh before responding back to the callee server
 func (r *RaftNode) AppendEntries(args *AppendEntriesArgs) (AppendEntriesReply, error) {
-	r.INF("Append Entries Hdl Enter")
+	r.DBG("Append Entries Hdl Enter")
 	replyCh := make(chan AppendEntriesReply)
 	r.appendEntriesMsgCh <- AppendEntriesMsg{args, replyCh}
-	r.INF("Append Entries Hdl Exit")
+	r.DBG("Append Entries Hdl Exit")
 	return <-replyCh, nil
 }
 
@@ -124,7 +124,7 @@ func (r *RaftNode) GetTerm(req *GetTermRequest) (GetTermReply, error) {
 //GetState
 func (r *RaftNode) GetState(req *GetStateRequest) (GetStateReply, error) {
 	reply := GetStateReply{Success: true, State: r.getState()}
-	r.INF("State=%d", reply.State)
+	r.DBG("State=%d", reply.State)
 	return reply, nil
 }
 

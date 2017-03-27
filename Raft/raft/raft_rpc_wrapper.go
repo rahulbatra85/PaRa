@@ -19,7 +19,7 @@ func (s *RaftRPCWrapper) startRaftRPCWrapper() {
 
 		conn, err := s.node.listener.Accept()
 		if err != nil {
-			s.node.INF("RaftRPCServer ERROR: %v", err)
+			s.node.ERR("RaftRPCServer ERROR: %v", err)
 			continue
 		}
 		go rpc.ServeConn(conn)

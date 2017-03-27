@@ -14,6 +14,7 @@ var ErrTrace *log.Logger
 func InitTracers() {
 	DebugTrace = log.New(ioutil.Discard, "", log.Ltime|log.Lshortfile)
 	InfoTrace = log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
+	//	InfoTrace = log.New(ioutil.Discard, "", log.Ltime|log.Lshortfile)
 	ErrTrace = log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
 }
 
