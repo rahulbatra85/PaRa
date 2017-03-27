@@ -63,8 +63,8 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 			r.DBG(" Rcv on AppendEntriesMsgCh\n")
 			fallback := r.handleAppendEntries(msg)
 			if fallback != true {
-				r.leaderNode = r.localAddr
-				r.INF(" From Leader\n")
+				r.leaderNode = *msg.args.FromNode
+				r.INF(" From Leader \n")
 				r.UpdateSM()
 				rcvAppendEntries = true
 			}
@@ -106,6 +106,7 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 		case msg := <-r.appendEntriesMsgCh:
 			r.DBG(" Rcv on AppendEntriesMsgCh\n")
 			if r.handleAppendEntries(msg) == true {
+				r.leaderNode = *msg.args.FromNode
 				r.UpdateSM()
 				return RaftState_FOLLOWER
 			}
@@ -129,7 +130,7 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 				}
 			}
 		case <-r.makeElectionTimeout():
-			r.DBG(" Rcv on ElecTO\n")
+			r.INF(" Rcv on ElecTO\n")
 			return RaftState_CANDIDATE
 		}
 	}
@@ -494,22 +495,30 @@ func (r *RaftNode) handleClientRequest(msg ClientRequestMsg) {
 		e := r.GetLogEntry(msg.args.Cmd.ClientId)
 		if e.Cmd.Op.Type == OpType_CLIENT_REGISTRATION {
 			//Check the last response sent to client
-			replyEntry := r.clientAppliedMap[msg.args.Cmd.ClientId]
-			if msg.args.Cmd.SeqNum == replyEntry.SeqNum {
-				//Reply REQUEST_SUCCESSFUL
-				reply := ClientReply{Code: ClientReplyCode_REQUEST_SUCCESSFUL, LeaderNode: &r.leaderNode, Value: replyEntry.Value}
-				msg.reply <- reply
-				r.INF("Client Request Replayed")
-			} else if msg.args.Cmd.SeqNum > replyEntry.SeqNum {
+			replyEntry, ok := r.clientAppliedMap[msg.args.Cmd.ClientId]
+			if !ok {
 				//appendLogEntry
 				entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: msg.args.Cmd}
 				r.AppendLog(entry)
 				r.clientRequestMap[r.GetLastLogIndex()] = msg
 				r.INF("ClientRequest Appended")
 			} else {
-				reply := ClientReply{Code: ClientReplyCode_REQUEST_FAILED, LeaderNode: &r.leaderNode, Value: ""}
-				msg.reply <- reply
-				r.INF("ClientRequest Bad")
+				if msg.args.Cmd.SeqNum == replyEntry.SeqNum {
+					//Reply REQUEST_SUCCESSFUL
+					reply := ClientReply{Code: ClientReplyCode_REQUEST_SUCCESSFUL, LeaderNode: &r.leaderNode, Value: replyEntry.Value}
+					msg.reply <- reply
+					r.INF("Client Request Replayed")
+				} else if msg.args.Cmd.SeqNum > replyEntry.SeqNum {
+					//appendLogEntry
+					entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: msg.args.Cmd}
+					r.AppendLog(entry)
+					r.clientRequestMap[r.GetLastLogIndex()] = msg
+					r.INF("ClientRequest Appended")
+				} else {
+					reply := ClientReply{Code: ClientReplyCode_REQUEST_FAILED, LeaderNode: &r.leaderNode, Value: ""}
+					msg.reply <- reply
+					r.INF("ClientRequest Bad")
+				}
 			}
 		} else {
 			//REQUEST_FAILED

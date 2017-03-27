@@ -27,7 +27,7 @@ func MakeRaftClient(nodes []NodeAddr, config *RaftClientConfig, clientID int32) 
 		rc.ClientId = clientID
 		return &rc
 	} else {
-		rc.INF("Raft Client Created. Trying to register with %v", rc.Leader)
+		rc.INF("Raft Client Trying to register with %v", rc.Leader)
 		tryCnt := 0
 		done := false
 		leaderIdx := 0
@@ -42,27 +42,28 @@ func MakeRaftClient(nodes []NodeAddr, config *RaftClientConfig, clientID int32) 
 				} else {
 					return nil
 				}
-			}
-			if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
+			} else {
+				if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
 
-				done = true
-				rc.Leader = *(reply.LeaderNode)
-				rc.ClientId = reply.ClientId
-				rc.INF("Registration Successful. Client_ID=%d", rc.ClientId)
-				return &rc
-			} else if reply.Code == ClientReplyCode_NOT_LEADER {
-				rc.INF("Registration NOT_LEADER")
-				leaderIdx = 0
-				if reply.LeaderNode != nil {
+					done = true
 					rc.Leader = *(reply.LeaderNode)
+					rc.ClientId = reply.ClientId
+					rc.INF("Registration Successful. Client_ID=%d", rc.ClientId)
+					return &rc
+				} else if reply.Code == ClientReplyCode_NOT_LEADER {
+					rc.INF("Registration NOT_LEADER")
+					leaderIdx = 0
+					if reply.LeaderNode != nil {
+						rc.Leader = *(reply.LeaderNode)
+					}
+				} else if reply.Code == ClientReplyCode_RETRY {
+					rc.INF("Registration RETRY")
+					time.Sleep(time.Millisecond * 500)
+				} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
+					rc.INF("Registration REQUEST_FAILED")
+					done = true
+					return nil
 				}
-			} else if reply.Code == ClientReplyCode_RETRY {
-				rc.INF("Registration RETRY")
-				time.Sleep(time.Millisecond * 500)
-			} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
-				rc.INF("Registration REQUEST_FAILED")
-				done = true
-				return nil
 			}
 			tryCnt++
 		}
@@ -88,26 +89,27 @@ func (rc *RaftClient) SendClientGetRequest(key string) (string, error) {
 			} else {
 				return "", err
 			}
-		}
-		if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
-			rc.INF("Request SUCCESSFUL")
-			return reply.Value, nil
-		} else if reply.Code == ClientReplyCode_RETRY {
-			rc.INF("Request RETRY")
-			time.Sleep(time.Millisecond * 500)
-			tryCnt++
-			if tryCnt > 5 {
-				return "", fmt.Errorf("Retry limit hit")
+		} else {
+			if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
+				//rc.INF("Request SUCCESSFUL")
+				return reply.Value, nil
+			} else if reply.Code == ClientReplyCode_RETRY {
+				rc.INF("Request RETRY")
+				time.Sleep(time.Millisecond * 500)
+				tryCnt++
+				if tryCnt > 5 {
+					return "", fmt.Errorf("Retry limit hit")
+				}
+			} else if reply.Code == ClientReplyCode_NOT_LEADER {
+				rc.INF("Request NOT_LEADER")
+				leaderIdx = 0
+				if reply.LeaderNode != nil {
+					rc.Leader = *(reply.LeaderNode)
+				}
+			} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
+				rc.INF("Request REQUEST_FAILED")
+				return "", fmt.Errorf("Request Failed")
 			}
-		} else if reply.Code == ClientReplyCode_NOT_LEADER {
-			rc.INF("Request NOT_LEADER")
-			leaderIdx = 0
-			if reply.LeaderNode != nil {
-				rc.Leader = *(reply.LeaderNode)
-			}
-		} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
-			rc.INF("Request REQUEST_FAILED")
-			return "", fmt.Errorf("Request Failed")
 		}
 	}
 }
@@ -129,26 +131,27 @@ func (rc *RaftClient) SendClientPutRequest(key string, value string) error {
 			} else {
 				return err
 			}
-		}
-		if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
-			rc.INF("Request SUCCESSFUL")
-			return nil
-		} else if reply.Code == ClientReplyCode_RETRY {
-			rc.INF("Request RETRY")
-			time.Sleep(time.Millisecond * 500)
-			tryCnt++
-			if tryCnt > 5 {
-				return fmt.Errorf("Retry limit hit")
+		} else {
+			if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
+				//rc.INF("Request SUCCESSFUL")
+				return nil
+			} else if reply.Code == ClientReplyCode_RETRY {
+				rc.INF("Request RETRY")
+				time.Sleep(time.Millisecond * 500)
+				tryCnt++
+				if tryCnt > 5 {
+					return fmt.Errorf("Retry limit hit")
+				}
+			} else if reply.Code == ClientReplyCode_NOT_LEADER {
+				rc.INF("Request NOT_LEADER")
+				leaderIdx = 0
+				if reply.LeaderNode != nil {
+					rc.Leader = *(reply.LeaderNode)
+				}
+			} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
+				rc.INF("Request REQUEST_FAILED")
+				return fmt.Errorf("Request Failed")
 			}
-		} else if reply.Code == ClientReplyCode_NOT_LEADER {
-			rc.INF("Request NOT_LEADER")
-			leaderIdx = 0
-			if reply.LeaderNode != nil {
-				rc.Leader = *(reply.LeaderNode)
-			}
-		} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
-			rc.INF("Request REQUEST_FAILED")
-			return fmt.Errorf("Request Failed")
 		}
 	}
 }

@@ -218,11 +218,16 @@ func getClient(remoteAddr *NodeAddr) (RaftRPCClient, error) {
 		rc.conn = conn
 		rc.cnt = 0
 		rClientsMap[remoteAddr.Addr] = rc
-	}
-	/*else if rc.cnt > 25 {
+	} else if rc.cnt > 50 {
+		var err error
+		var conn *grpc.ClientConn
 		fmt.Printf("Closing Connection to %s", remoteAddr.Addr)
-		rc.conn.Close()
-		conn, err := grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
+		err = rc.conn.Close()
+		if err != nil {
+			fmt.Printf("Error Reconnecting to %s", remoteAddr.Addr)
+			return nil, err
+		}
+		conn, err = grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +235,7 @@ func getClient(remoteAddr *NodeAddr) (RaftRPCClient, error) {
 		rc.conn = conn
 		rc.cnt = 0
 		rClientsMap[remoteAddr.Addr] = rc
-	}*/
+	}
 	rc.cnt++
 	return rc.rpcClient, nil
 }

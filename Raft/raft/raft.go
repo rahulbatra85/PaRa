@@ -107,7 +107,7 @@ func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config 
 
 	//Set up logging
 	InitTracers()
-	SetDebugTrace(true)
+	//	SetDebugTrace(true)
 
 	/*
 		//Create listener

@@ -40,11 +40,12 @@ func (s *RaftRPCWrapper) StartRPC(ctx context.Context, req *StartRequest) (*Star
 //RequestVoteWrapper
 func (s *RaftRPCWrapper) RequestVoteRPC(ctx context.Context, req *RequestVoteArgs) (*RequestVoteReply, error) {
 	var reply RequestVoteReply
-	if s.node.netConfig.GetNetworkConfig(s.node.localAddr, *req.FromNode) == false {
-		s.node.INF("RequestVote RCV NOT Allowed")
-		return nil, fmt.Errorf("Not allowed")
-	}
-	s.node.INF("RequestVote Wrapper")
+	/*
+		if s.node.netConfig.GetNetworkConfig(s.node.localAddr, *req.FromNode) == false {
+			s.node.INF("RequestVote RCV NOT Allowed")
+			return nil, fmt.Errorf("Not allowed")
+		}*/
+	s.node.DBG("RequestVote Wrapper")
 	err := s.node.RequestVote(req, &reply)
 	return &reply, err
 }
@@ -52,11 +53,12 @@ func (s *RaftRPCWrapper) RequestVoteRPC(ctx context.Context, req *RequestVoteArg
 //AppendEntriesWrapper
 func (s *RaftRPCWrapper) AppendEntriesRPC(ctx context.Context, req *AppendEntriesArgs) (*AppendEntriesReply, error) {
 	var reply AppendEntriesReply
-	if s.node.netConfig.GetNetworkConfig(s.node.localAddr, *req.FromNode) == false {
-		s.node.INF("AppEntries RCV NOT Allowed")
-		return nil, fmt.Errorf("Not allowed")
-	}
-	s.node.INF("AppendEntries Wrapper")
+	/*
+		if s.node.netConfig.GetNetworkConfig(s.node.localAddr, *req.FromNode) == false {
+			s.node.INF("AppEntries RCV NOT Allowed")
+			return nil, fmt.Errorf("Not allowed")
+		}*/
+	s.node.DBG("AppendEntries Wrapper")
 	err := s.node.AppendEntries(req, &reply)
 	return &reply, err
 }

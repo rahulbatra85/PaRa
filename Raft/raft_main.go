@@ -1,9 +1,11 @@
 package main
 
 import (
-	"./raft"
 	"flag"
 	"fmt"
+	"runtime"
+
+	"./raft"
 )
 
 func main() {
@@ -11,6 +13,7 @@ func main() {
 	var nmAddr string
 	var port int
 	var eTO int
+	runtime.GOMAXPROCS(2)
 
 	flag.IntVar(&port, "port", 0, "Server Port. Default is random.")
 	flag.StringVar(&cAddr, "cAddr", "", "Addr of Cluster Node. Default is empty.")

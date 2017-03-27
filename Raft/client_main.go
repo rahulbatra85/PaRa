@@ -32,10 +32,7 @@ func main() {
 	flag.Parse()
 
 	if addrs == nil {
-		fmt.Fprintf(os.Stderr, "LeaderAddr must be specified")
-		return
-	} else {
-		fmt.Printf("%v", addrs)
+		fmt.Fprintf(os.Stderr, "Nodes must be specified")
 		return
 	}
 
@@ -71,7 +68,7 @@ func main() {
 				break
 			} else if tokens[0] == "GET" || tokens[0] == "get" {
 				if len(tokens) != 2 {
-					fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected GET/get <key>", input)
+					fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected GET/get <key>\n", input)
 				} else {
 					result, err := rc.SendClientGetRequest(tokens[1])
 					if err == nil {
@@ -82,7 +79,7 @@ func main() {
 				}
 			} else if tokens[0] == "PUT" || tokens[0] == "put" {
 				if len(tokens) != 3 {
-					fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected PUT/put <key> <value>", input)
+					fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected PUT/put <key> <value>\n", input)
 				} else {
 					err := rc.SendClientPutRequest(tokens[1], tokens[2])
 					if err == nil {
