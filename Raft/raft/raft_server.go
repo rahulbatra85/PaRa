@@ -63,6 +63,7 @@ func (r *RaftNode) do_follower() (nextState RaftState) {
 			r.DBG(" Rcv on AppendEntriesMsgCh\n")
 			fallback := r.handleAppendEntries(msg)
 			if fallback != true {
+				r.leaderNode = r.localAddr
 				r.INF(" From Leader\n")
 				r.UpdateSM()
 				rcvAppendEntries = true
@@ -152,7 +153,7 @@ func (r *RaftNode) do_leader() (nextState RaftState) {
 	fallback := make(chan bool)
 	sentToMajority := make(chan bool, 1)
 	sentToMajority <- true
-
+	r.leaderNode = r.localAddr
 	for {
 		select {
 		case <-sendTimeout:
@@ -206,7 +207,8 @@ func (r *RaftNode) requestVotes() {
 			go func(n NodeAddr) {
 				//reply := &RequestVoteReply{}
 				r.INF(" Send ReqVote to %v\n", n.Id)
-				reply, err := r.RequestVoteRPC(&n, args)
+				//reply, err := r.RequestVoteRPC(&n, args)
+				reply, err := RequestVoteRPC(&n, args)
 				if err == nil {
 					r.requestVoteReplyCh <- *reply
 				}
@@ -254,7 +256,8 @@ func (r *RaftNode) sendHeartBeats(fallBack chan bool, sentToMajority chan bool) 
 				req.LeaderCommit = r.commitIndex
 
 				r.INF(" Send AE to %v\n", n.Id)
-				reply, err := r.AppendEntriesRPC(&n, req)
+				//reply, err := r.AppendEntriesRPC(&n, req)
+				reply, err := AppendEntriesRPC(&n, req)
 				if err == nil {
 					if reply.Term > r.getCurrentTerm() {
 						r.setCurrentTerm(reply.Term)
@@ -474,6 +477,8 @@ func (r *RaftNode) handleClientRegister(msg ClientRegisterMsg) {
 		cmd := &Command{ClientId: -1, SeqNum: 0, Op: op}
 		entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: cmd}
 		r.AppendLog(entry)
+		r.clientRegisterMap[r.GetLastLogIndex()] = msg
+		r.INF("ClientRegistration AppendLog")
 	}
 }
 
@@ -494,21 +499,24 @@ func (r *RaftNode) handleClientRequest(msg ClientRequestMsg) {
 				//Reply REQUEST_SUCCESSFUL
 				reply := ClientReply{Code: ClientReplyCode_REQUEST_SUCCESSFUL, LeaderNode: &r.leaderNode, Value: replyEntry.Value}
 				msg.reply <- reply
+				r.INF("Client Request Replayed")
 			} else if msg.args.Cmd.SeqNum > replyEntry.SeqNum {
 				//appendLogEntry
 				entry := &LogEntry{Term: r.getCurrentTerm(), Cmd: msg.args.Cmd}
 				r.AppendLog(entry)
 				r.clientRequestMap[r.GetLastLogIndex()] = msg
+				r.INF("ClientRequest Appended")
 			} else {
 				reply := ClientReply{Code: ClientReplyCode_REQUEST_FAILED, LeaderNode: &r.leaderNode, Value: ""}
 				msg.reply <- reply
+				r.INF("ClientRequest Bad")
 			}
 		} else {
 			//REQUEST_FAILED
 			reply := ClientReply{Code: ClientReplyCode_REQUEST_FAILED, LeaderNode: &r.leaderNode, Value: ""}
 			msg.reply <- reply
+			r.INF("ClientRequest NOT Registered")
 		}
-
 	}
 }
 
@@ -516,23 +524,40 @@ func (r *RaftNode) handleClientRequest(msg ClientRequestMsg) {
 //This routine wakes up periodically to apply any committed entries in the log
 //
 func (r *RaftNode) UpdateSM() {
+
 	for r.commitIndex > r.lastApplied {
 		r.lastApplied++
 		entry := r.GetLogEntry(r.lastApplied)
-		value, err := r.app.ApplyOperation(*entry.Cmd)
-		reply := ClientReply{}
-		if err != nil {
-			reply.Code = ClientReplyCode_REQUEST_FAILED
-		} else {
+		cmd := *entry.Cmd
+		if cmd.Op.Type == OpType_CLIENT_REGISTRATION {
+			r.INF("SM: ClientRegistration Applied")
+			reply := ClientRegisterReply{}
+			reply.ClientId = r.lastApplied
+			reply.LeaderNode = &r.localAddr
 			reply.Code = ClientReplyCode_REQUEST_SUCCESSFUL
-		}
-		reply.LeaderNode = &r.leaderNode
-		reply.SeqNum = entry.Cmd.SeqNum
-		reply.Value = value
-		r.clientAppliedMap[entry.Cmd.ClientId] = reply
-		if msg, ok := r.clientRequestMap[r.lastApplied]; ok {
-			msg.reply <- reply
-			delete(r.clientRequestMap, r.lastApplied)
+			if msg, ok := r.clientRegisterMap[r.lastApplied]; ok {
+				r.INF("Replying to ClientRegister")
+				msg.reply <- reply
+				delete(r.clientRegisterMap, r.lastApplied)
+			}
+		} else {
+			value, err := r.app.ApplyOperation(*entry.Cmd)
+			reply := ClientReply{}
+			if err != nil {
+				reply.Code = ClientReplyCode_REQUEST_FAILED
+			} else {
+				r.INF("SM: ClientRequest Applied")
+				reply.Code = ClientReplyCode_REQUEST_SUCCESSFUL
+			}
+			reply.LeaderNode = &r.leaderNode
+			reply.SeqNum = entry.Cmd.SeqNum
+			reply.Value = value
+			r.clientAppliedMap[entry.Cmd.ClientId] = reply
+			if msg, ok := r.clientRequestMap[r.lastApplied]; ok {
+				r.INF("Replying to client")
+				msg.reply <- reply
+				delete(r.clientRequestMap, r.lastApplied)
+			}
 		}
 	}
 }

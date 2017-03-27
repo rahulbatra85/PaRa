@@ -11,61 +11,85 @@ import (
 	"./raft"
 )
 
+type nAddr []string
+
+func (na *nAddr) String() string {
+	return fmt.Sprintf("%v", *na)
+}
+
+func (na *nAddr) Set(value string) error {
+	*na = append(*na, value)
+
+	return nil
+}
+
 func main() {
 
-	var leaderAddr string
-	flag.StringVar(&leaderAddr, "l", "", "Leader Node. Must not be empty ")
+	var addrs nAddr
+	var clientID int
+	flag.Var(&addrs, "l", "Nodes Addresses. Must not be empty")
+	flag.IntVar(&clientID, "i", -1, "ClientID")
 	flag.Parse()
 
-	if leaderAddr == "" {
+	if addrs == nil {
 		fmt.Fprintf(os.Stderr, "LeaderAddr must be specified")
+		return
+	} else {
+		fmt.Printf("%v", addrs)
 		return
 	}
 
-	leaderNode := raft.NodeAddr{Id: raft.HashAddr(leaderAddr, 2), Addr: leaderAddr}
+	Nodes := make([]raft.NodeAddr, len(addrs))
+	for i, addr := range addrs {
+		Nodes[i] = raft.NodeAddr{Id: raft.HashAddr(addr, 2), Addr: addr}
+	}
 
 	//create client
-	rc := raft.MakeRaftClient(leaderNode)
-
-	inbuf := bufio.NewReader(os.Stdin)
-
-	for {
-		//parse command
-		input, err := inbuf.ReadString('\n')
-		if err == io.EOF {
-			continue
-		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "Error Reading input")
-			continue
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-		tokens := strings.Split(input, " ")
-		if tokens[0] == "exit" {
-			break
-		} else if tokens[0] == "GET" || tokens[0] == "get" {
-			if len(tokens) != 2 {
-				fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected GET/get <key>", input)
-			} else {
-				result, err := rc.SendClientGetRequest(tokens[1])
-				if err == nil {
-					fmt.Printf("%s was successful. value=%s \n", input, result)
-				} else {
-					fmt.Fprintf(os.Stderr, "%v\n", err)
-				}
+	config := raft.CreateRaftClientConfig()
+	rc := raft.MakeRaftClient(Nodes, config, int32(clientID))
+	if rc == nil {
+		fmt.Fprintf(os.Stderr, "Client Create Failed. Exiting")
+	} else {
+		fmt.Printf("Ready for input commands\n")
+		inbuf := bufio.NewReader(os.Stdin)
+		for {
+			//parse command
+			input, err := inbuf.ReadString('\n')
+			if err == io.EOF {
+				continue
+			} else if err != nil {
+				fmt.Fprintf(os.Stderr, "Error Reading input")
+				continue
 			}
-		} else if tokens[0] == "PUT" || tokens[0] == "put" {
-			if len(tokens) != 3 {
-				fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected PUT/put <key> <value>", input)
-			} else {
-				err := rc.SendClientPutRequest(tokens[1], tokens[2])
-				if err == nil {
-					fmt.Printf("%s was successful \n", input)
+
+			input = strings.TrimSpace(input)
+			if input == "" {
+				continue
+			}
+			tokens := strings.Split(input, " ")
+			if tokens[0] == "exit" {
+				break
+			} else if tokens[0] == "GET" || tokens[0] == "get" {
+				if len(tokens) != 2 {
+					fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected GET/get <key>", input)
 				} else {
-					fmt.Fprintf(os.Stderr, "%v\n", err)
+					result, err := rc.SendClientGetRequest(tokens[1])
+					if err == nil {
+						fmt.Printf("%s was successful. value=%s \n", input, result)
+					} else {
+						fmt.Fprintf(os.Stderr, "%v\n", err)
+					}
+				}
+			} else if tokens[0] == "PUT" || tokens[0] == "put" {
+				if len(tokens) != 3 {
+					fmt.Fprintf(os.Stderr, "Invalid Command %s. Expected PUT/put <key> <value>", input)
+				} else {
+					err := rc.SendClientPutRequest(tokens[1], tokens[2])
+					if err == nil {
+						fmt.Printf("%s was successful \n", input)
+					} else {
+						fmt.Fprintf(os.Stderr, "%v\n", err)
+					}
 				}
 			}
 		}

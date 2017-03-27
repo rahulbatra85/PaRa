@@ -60,9 +60,10 @@ type RaftNode struct {
 	clientRequestMsgCh   chan ClientRequestMsg
 
 	//Application State
-	app              *KVApp
-	clientAppliedMap map[int32]ClientReply
-	clientRequestMap map[int32]ClientRequestMsg
+	app               *KVApp
+	clientAppliedMap  map[int32]ClientReply
+	clientRequestMap  map[int32]ClientRequestMsg
+	clientRegisterMap map[int32]ClientRegisterMsg
 }
 
 func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config *RaftConfig) (pr *RaftNode) {
@@ -87,6 +88,7 @@ func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config 
 	r.app = MakeKVApp()
 	r.clientAppliedMap = make(map[int32]ClientReply)
 	r.clientRequestMap = make(map[int32]ClientRequestMsg)
+	r.clientRegisterMap = make(map[int32]ClientRegisterMsg)
 
 	//Init channels
 	r.appendEntriesMsgCh = make(chan AppendEntriesMsg)

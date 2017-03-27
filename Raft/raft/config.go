@@ -11,6 +11,7 @@ type RaftConfig struct {
 	HeartbeatFrequency  int //in ms
 	ElectionTimeout     int //in ms
 	ElectionTimeoutBase int
+	RPCCancelTimeout    int
 }
 
 func CreateRaftConfig() *RaftConfig {
@@ -19,9 +20,25 @@ func CreateRaftConfig() *RaftConfig {
 	c.ClusterSize = 3
 	c.Majority = (c.ClusterSize + 1) / 2
 	c.HeartbeatFrequency = 1000
-	c.ElectionTimeout = 4000
-	c.ElectionTimeoutBase = 6000
+	c.ElectionTimeout = 6000
+	c.ElectionTimeoutBase = 4000
+	c.RPCCancelTimeout = 500
 	return c
+}
+
+type RaftClientConfig struct {
+	NodeIdSize       int
+	ClusterSize      int
+	RPCCancelTimeout int
+}
+
+func CreateRaftClientConfig() *RaftClientConfig {
+	rc := new(RaftClientConfig)
+	rc.NodeIdSize = 2
+	rc.ClusterSize = 3
+	rc.RPCCancelTimeout = 500
+
+	return rc
 }
 
 type NodeManagerConfig struct {

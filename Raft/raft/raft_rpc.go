@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	RPCTimeout = 1500
+)
+
 //RPC client connection map
 var rClientsMap = make(map[string]*rClient)
 
@@ -64,32 +68,44 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []*NodeAddr) error {
 }
 
 // RequestVote RPC
-func (r *RaftNode) RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs) (*RequestVoteReply, error) {
-	if r.netConfig.GetNetworkConfig(r.localAddr, *remoteNode) == false {
+//func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
+func RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs) (*RequestVoteReply, error) {
+	/*	if r.netConfig.GetNetworkConfig(r.localAddr, *remoteNode) == false {
 		r.INF("ReqVOTE send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
-	}
+	}*/
+	var err error
+	var reply *RequestVoteReply
 	client, err := getClient(remoteNode)
 	if err != nil {
 		return nil, err
 	}
-	return client.RequestVoteRPC(context.Background(), &req)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(RPCTimeout))
+	defer cancel()
+	reply, err = client.RequestVoteRPC(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return reply, nil
 }
 
 // Append Entries RPC
-func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
-	r.INF("AppendEntriesRPC Enter")
+//func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
+func AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
+	/*r.INF("AppendEntriesRPC Enter")
 	if r.netConfig.GetNetworkConfig(r.localAddr, *remoteNode) == false {
 		r.INF("AppEntries send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
-	}
+	}*/
 	var err error
 	var reply *AppendEntriesReply
 	client, err := getClient(remoteNode)
 	if err != nil {
 		return nil, err
 	}
-	reply, err = client.AppendEntriesRPC(context.Background(), &req, grpc.FailFast(true))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(RPCTimeout))
+	defer cancel()
+	reply, err = client.AppendEntriesRPC(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +122,9 @@ func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*Clien
 	if err != nil {
 		return nil, err
 	}
-	return client.ClientRegisterRequestRPC(context.Background(), &request)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(4000))
+	defer cancel()
+	return client.ClientRegisterRequestRPC(ctx, &request)
 }
 
 //Request
@@ -115,7 +133,9 @@ func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientR
 	if err != nil {
 		return nil, err
 	}
-	return client.ClientRequestRPC(context.Background(), &request)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(4000))
+	defer cancel()
+	return client.ClientRequestRPC(ctx, &request)
 }
 
 /////////////////////////////////////////
@@ -198,7 +218,8 @@ func getClient(remoteAddr *NodeAddr) (RaftRPCClient, error) {
 		rc.conn = conn
 		rc.cnt = 0
 		rClientsMap[remoteAddr.Addr] = rc
-	} else if rc.cnt > 25 {
+	}
+	/*else if rc.cnt > 25 {
 		fmt.Printf("Closing Connection to %s", remoteAddr.Addr)
 		rc.conn.Close()
 		conn, err := grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
@@ -209,7 +230,7 @@ func getClient(remoteAddr *NodeAddr) (RaftRPCClient, error) {
 		rc.conn = conn
 		rc.cnt = 0
 		rClientsMap[remoteAddr.Addr] = rc
-	}
+	}*/
 	rc.cnt++
 	return rc.rpcClient, nil
 }

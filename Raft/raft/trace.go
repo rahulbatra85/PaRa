@@ -82,3 +82,43 @@ func (nm *NodeManager) INF(formatString string, args ...interface{}) {
 func (p *NodeManager) ERR(formatString string, args ...interface{}) {
 	NodeManagerErrTrace.Output(2, fmt.Sprintf("ERR:  %v", fmt.Sprintf(formatString, args...)))
 }
+
+///////////////////////////////////
+//Client
+///////////////////////////////////
+
+var ClientDebugTrace *log.Logger
+var ClientInfoTrace *log.Logger
+var ClientErrTrace *log.Logger
+
+func ClientInitTracers() {
+	ClientDebugTrace = log.New(ioutil.Discard, "", log.Ltime|log.Lshortfile)
+	ClientInfoTrace = log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
+	ClientErrTrace = log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
+}
+
+func ClientSetDebugTrace(enable bool) {
+	if enable {
+		ClientDebugTrace = log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
+	} else {
+		ClientDebugTrace = log.New(ioutil.Discard, "", log.Ltime|log.Lshortfile)
+	}
+}
+
+func ClientSetInfoTrace(enable bool) {
+	if enable {
+		ClientInfoTrace = log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
+	} else {
+		ClientInfoTrace = log.New(ioutil.Discard, "", log.Ltime|log.Lshortfile)
+	}
+}
+
+func (rc *RaftClient) DBG(formatString string, args ...interface{}) {
+	ClientDebugTrace.Output(2, fmt.Sprintf("DBG:  %v", fmt.Sprintf(formatString, args...)))
+}
+func (rc *RaftClient) INF(formatString string, args ...interface{}) {
+	ClientInfoTrace.Output(2, fmt.Sprintf("INF:  %v", fmt.Sprintf(formatString, args...)))
+}
+func (rc *RaftClient) ERR(formatString string, args ...interface{}) {
+	ClientErrTrace.Output(2, fmt.Sprintf("ERR:  %v", fmt.Sprintf(formatString, args...)))
+}
