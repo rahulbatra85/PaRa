@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"net"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
-	//"net/rpc"
-	"os"
+	//	"google.golang.org/grpc"
+	//	"google.golang.org/grpc/reflection"
+	"net/rpc"
+	//	"os"
 	"sync"
 	"time"
 )
@@ -31,7 +31,7 @@ type RaftNode struct {
 	config    *RaftConfig //Config
 	//RPCServer *RaftRPCServer
 	RPCWrapper *RaftRPCWrapper
-	GRPCServer *grpc.Server
+	//GRPCServer *grpc.Server
 
 	// Raft paper's Figure 2 description of state
 	state     RaftState
@@ -107,56 +107,58 @@ func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config 
 
 	//Set up logging
 	InitTracers()
-	//	SetDebugTrace(true)
+	SetDebugTrace(true)
 
-	/*
-		//Create listener
-		conn, err := CreateListener(port)
-		if err != nil {
-			fmt.Printf("Error Creating Listener =%v\n", err)
-			return
-		}
-		r.Id = HashAddr(conn.Addr().String(), r.config.NodeIdSize) //Hash Addr to determine ID
-		r.INF("Created Listener %v\n", conn.Addr())
-		r.listener = conn //Set listener
-		r.port = port     //Set listen Port
-		r.localAddr = NodeAddr{Id: r.Id, Addr: conn.Addr().String()}
+	//Create listener
+	conn, err := CreateUnixListener(port)
+	//conn, err := CreateListener(port)
+	if err != nil {
+		fmt.Printf("Error Creating Listener =%v\n", err)
+		return
+	}
+	r.Id = HashAddr(conn.Addr().String(), r.config.NodeIdSize) //Hash Addr to determine ID
+	r.INF("Created Listener %v\n", conn.Addr())
+	r.listener = conn //Set listener
+	r.port = port     //Set listen Port
+	r.localAddr = NodeAddr{Id: r.Id, Addr: conn.Addr().String()}
 
-		//Register and Start RPC server
-		r.RPCServer = &RaftRPCServer{pr}
-		rpc.RegisterName(r.localAddr.Addr, r.RPCServer)
-		r.DBG("Registered RPC\n")
-		go r.RPCServer.startRaftRPCServer()
-	*/
+	//Register and Start RPC server
+	r.RPCWrapper = &RaftRPCWrapper{pr}
+	rpc.RegisterName(r.localAddr.Addr, r.RPCWrapper)
+	r.DBG("Registered RPC\n")
+	go r.RPCWrapper.startRaftRPCWrapper()
 
 	//Init stable storage
 	entry := LogEntry{Term: 0, Cmd: nil}
 	r.AppendLog(&entry)
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil
-	}
+	/*
+			hostname, err := os.Hostname()
+			if err != nil {
+				return nil
+			}
 
-	saddr := fmt.Sprintf("%v:%v", hostname, port)
-	lis, err := net.Listen("tcp", saddr)
-	if err != nil {
-		fmt.Errorf("failed to listen: %v", err)
-		return nil
-	}
-	s := grpc.NewServer()
-	r.GRPCServer = s
-	r.RPCWrapper = &RaftRPCWrapper{&r}
-	RegisterRaftRPCServer(s, r.RPCWrapper)
-	// Register reflection service on gRPC server.
-	reflection.Register(s)
-	r.Id = HashAddr(lis.Addr().String(), r.config.NodeIdSize) //Hash Addr to determine ID
-	r.INF("Created Listener %v\n", lis.Addr())
-	r.listener = lis //Set listener
-	r.port = port    //Set listen Port
-	r.localAddr = NodeAddr{Id: r.Id, Addr: lis.Addr().String()}
+			saddr := fmt.Sprintf("%v:%v", hostname, port)
+			lis, err := net.Listen("tcp", saddr)
+			if err != nil {
+				fmt.Errorf("failed to listen: %v", err)
+				return nil
+			}
+			s := grpc.NewServer()
+			r.GRPCServer = s
+			r.RPCWrapper = &RaftRPCWrapper{&r}
+			RegisterRaftRPCServer(s, r.RPCWrapper)
+			// Register reflection service on gRPC server.
+			reflection.Register(s)
 
-	go r.RPCWrapper.startRaftRPCWrapper()
+		r.Id = HashAddr(lis.Addr().String(), r.config.NodeIdSize) //Hash Addr to determine ID
+		r.INF("Created Listener %v\n", lis.Addr())
+		r.listener = lis //Set listener
+		r.port = port    //Set listen Port
+		r.localAddr = NodeAddr{Id: r.Id, Addr: lis.Addr().String()}
+
+		go r.RPCWrapper.startRaftRPCWrapper()
+	*/
 
 	//Either Send JoinRPC to main node or wait to receive JoinRPC from all nodes
 	if remoteNodeAddr != nil {

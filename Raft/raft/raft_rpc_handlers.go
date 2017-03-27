@@ -47,27 +47,26 @@ func (r *RaftNode) Start(request *StartRequest) error {
 //
 //RequestVoteMsg structure to wrap up an incoming RPC msg
 type RequestVoteMsg struct {
-	args  RequestVoteArgs
+	args  *RequestVoteArgs
 	reply chan RequestVoteReply
 }
 
 //This receives an incoming RPC message and packages it into RequestVoteMsg structure.
 //It then forwards to the run_server go routine through requestVoteMsgCh. And waits
 //on replyCh before responding back to the callee server
-func (r *RaftNode) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) error {
+func (r *RaftNode) RequestVote(args *RequestVoteArgs) (RequestVoteReply, error) {
 	r.INF("ReqVote Hdl Enter")
 	replyCh := make(chan RequestVoteReply)
-	r.requestVoteMsgCh <- RequestVoteMsg{*args, replyCh}
-	*reply = <-replyCh
+	r.requestVoteMsgCh <- RequestVoteMsg{args, replyCh}
 	r.INF("ReqVote Hdl Exit")
-	return nil
+	return <-replyCh, nil
 }
 
 // AppendEntries RPC handler.
 //
 //AppendEntriesMsg structure to wrap up an incoming RPC msg
 type AppendEntriesMsg struct {
-	args  AppendEntriesArgs
+	args  *AppendEntriesArgs
 	reply chan AppendEntriesReply
 }
 
@@ -75,96 +74,80 @@ type AppendEntriesMsg struct {
 //This receives an incoming RPC message and packages it into AppendEntriesMsg structure.
 //It then forwards to the local "run_server" go routine through appendEntriesMsgCh . And waits
 //on replyCh before responding back to the callee server
-func (r *RaftNode) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) error {
+func (r *RaftNode) AppendEntries(args *AppendEntriesArgs) (AppendEntriesReply, error) {
 	r.INF("Append Entries Hdl Enter")
 	replyCh := make(chan AppendEntriesReply)
-	r.appendEntriesMsgCh <- AppendEntriesMsg{*args, replyCh}
-	*reply = <-replyCh
+	r.appendEntriesMsgCh <- AppendEntriesMsg{args, replyCh}
 	r.INF("Append Entries Hdl Exit")
-	return nil
+	return <-replyCh, nil
 }
 
 // Client Register RPC handler.
 //
 //ClientRegisterMSG structure to wrap up an incoming RPC msg
 type ClientRegisterMsg struct {
-	args  ClientRegisterArgs
+	args  *ClientRegisterArgs
 	reply chan ClientRegisterReply
 }
 
-func (r *RaftNode) ClientRegister(args *ClientRegisterArgs, reply *ClientRegisterReply) error {
+func (r *RaftNode) ClientRegister(args *ClientRegisterArgs) (ClientRegisterReply, error) {
 	r.INF("ClientRegister Enter")
 	replyCh := make(chan ClientRegisterReply)
-	r.clientRegisterMsgCh <- ClientRegisterMsg{*args, replyCh}
-	*reply = <-replyCh
+	r.clientRegisterMsgCh <- ClientRegisterMsg{args, replyCh}
 	r.INF("ClientRegister Exit")
-	return nil
+	return <-replyCh, nil
 }
 
 // Client Request RPC handler.
 //
 //ClientRequest MSG structure to wrap up an incoming RPC msg
 type ClientRequestMsg struct {
-	args  ClientRequestArgs
+	args  *ClientRequestArgs
 	reply chan ClientReply
 }
 
-func (r *RaftNode) ClientRequest(args *ClientRequestArgs, reply *ClientReply) error {
+func (r *RaftNode) ClientRequest(args *ClientRequestArgs) (ClientReply, error) {
 	r.INF("ClientRequest Enter")
 	replyCh := make(chan ClientReply)
-	r.clientRequestMsgCh <- ClientRequestMsg{*args, replyCh}
-	*reply = <-replyCh
+	r.clientRequestMsgCh <- ClientRequestMsg{args, replyCh}
 	r.INF("ClientRequest Exit")
-	return nil
+	return <-replyCh, nil
 }
 
 //GetTerm
-func (r *RaftNode) GetTerm(req *GetTermRequest, reply *GetTermReply) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	reply.Success = true
-	reply.Term = r.getCurrentTerm()
+func (r *RaftNode) GetTerm(req *GetTermRequest) (GetTermReply, error) {
+	reply := GetTermReply{Success: true, Term: r.getCurrentTerm()}
 
-	return nil
+	return reply, nil
 }
 
 //GetState
-func (r *RaftNode) GetState(req *GetStateRequest, reply *GetStateReply) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	reply.Success = true
-	reply.State = r.getState()
+func (r *RaftNode) GetState(req *GetStateRequest) (GetStateReply, error) {
+	reply := GetStateReply{Success: true, State: r.getState()}
 	r.INF("State=%d", reply.State)
-
-	return nil
+	return reply, nil
 }
 
 //Enable Node
-func (r *RaftNode) EnableNode(req *EnableNodeRequest, reply *EnableNodeReply) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	reply.Success = true
+func (r *RaftNode) EnableNode(req *EnableNodeRequest) (EnableNodeReply, error) {
+	reply := EnableNodeReply{Success: true}
 	r.netConfig.EnableNetwork()
 
-	return nil
+	return reply, nil
 }
 
 //Disable Node
-func (r *RaftNode) DisableNode(req *DisableNodeRequest, reply *DisableNodeReply) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	reply.Success = true
+func (r *RaftNode) DisableNode(req *DisableNodeRequest) (DisableNodeReply, error) {
+	reply := DisableNodeReply{Success: true}
 	r.netConfig.DisableNetwork()
 
-	return nil
+	return reply, nil
 }
 
 //SetNodetoNode
-func (r *RaftNode) SetNodetoNode(req *SetNodetoNodeRequest, reply *SetNodetoNodeReply) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	reply.Success = true
+func (r *RaftNode) SetNodetoNode(req *SetNodetoNodeRequest) (SetNodetoNodeReply, error) {
+	reply := SetNodetoNodeReply{Success: true}
 	r.netConfig.SetNetworkConfig(r.localAddr, *(req.ToNode), req.Enable)
 
-	return nil
+	return reply, nil
 }

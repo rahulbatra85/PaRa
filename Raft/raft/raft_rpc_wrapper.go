@@ -1,9 +1,9 @@
 package raft
 
 import (
-	"fmt"
-	//"net/rpc"
-	"golang.org/x/net/context"
+	//"fmt"
+	"net/rpc"
+	//"golang.org/x/net/context"
 )
 
 //We create this type to register with RPC server
@@ -14,107 +14,107 @@ type RaftRPCWrapper struct {
 }
 
 func (s *RaftRPCWrapper) startRaftRPCWrapper() {
-	s.node.DBG("RaftRPCWrapper Started")
-	if err := s.node.GRPCServer.Serve(s.node.listener); err != nil {
-		fmt.Errorf("failed to serve: %v", err)
-		return
+	s.node.INF("Starting RPC Server")
+	for {
+
+		conn, err := s.node.listener.Accept()
+		if err != nil {
+			s.node.INF("RaftRPCServer ERROR: %v", err)
+			continue
+		}
+		go rpc.ServeConn(conn)
 	}
 }
 
 //JoinRPC
-func (s *RaftRPCWrapper) JoinRPC(ctx context.Context, req *JoinRequest) (*JoinReply, error) {
-	var reply JoinReply
+func (s *RaftRPCWrapper) JoinRPC(req *JoinRequest, reply *JoinReply) error {
+	s.node.DBG("JoinRPC Enter")
 	err := s.node.Join(req)
 	reply.Success = err == nil
-	return &reply, err
+	s.node.DBG("JoinRPC Exit")
+	return err
 }
 
 //StartRPC
-func (s *RaftRPCWrapper) StartRPC(ctx context.Context, req *StartRequest) (*StartReply, error) {
-	var reply StartReply
+func (s *RaftRPCWrapper) StartRPC(req *StartRequest, reply *StartReply) error {
+	s.node.DBG("StartRPC Enter")
 	err := s.node.Start(req)
 	reply.Success = err == nil
-	return &reply, err
+	s.node.DBG("StartRPC Exit")
+	return err
 }
 
 //RequestVoteWrapper
-func (s *RaftRPCWrapper) RequestVoteRPC(ctx context.Context, req *RequestVoteArgs) (*RequestVoteReply, error) {
-	var reply RequestVoteReply
+func (s *RaftRPCWrapper) RequestVoteRPC(req *RequestVoteArgs, reply *RequestVoteReply) error {
 	/*
 		if s.node.netConfig.GetNetworkConfig(s.node.localAddr, *req.FromNode) == false {
 			s.node.INF("RequestVote RCV NOT Allowed")
 			return nil, fmt.Errorf("Not allowed")
 		}*/
 	s.node.DBG("RequestVote Wrapper")
-	err := s.node.RequestVote(req, &reply)
-	return &reply, err
+	rep, err := s.node.RequestVote(req)
+	*reply = rep
+	return err
 }
 
 //AppendEntriesWrapper
-func (s *RaftRPCWrapper) AppendEntriesRPC(ctx context.Context, req *AppendEntriesArgs) (*AppendEntriesReply, error) {
-	var reply AppendEntriesReply
+func (s *RaftRPCWrapper) AppendEntriesRPC(req *AppendEntriesArgs, reply *AppendEntriesReply) error {
 	/*
 		if s.node.netConfig.GetNetworkConfig(s.node.localAddr, *req.FromNode) == false {
 			s.node.INF("AppEntries RCV NOT Allowed")
 			return nil, fmt.Errorf("Not allowed")
 		}*/
 	s.node.DBG("AppendEntries Wrapper")
-	err := s.node.AppendEntries(req, &reply)
-	return &reply, err
+	rep, err := s.node.AppendEntries(req)
+	*reply = rep
+	return err
 }
 
 //ClientRegisterRequestWrapper
-func (s *RaftRPCWrapper) ClientRegisterRequestRPC(ctx context.Context, req *ClientRegisterArgs) (*ClientRegisterReply, error) {
-	var reply ClientRegisterReply
-	var err error
-	err = s.node.ClientRegister(req, &reply)
-	return &reply, err
+func (s *RaftRPCWrapper) ClientRegisterRequestRPC(req *ClientRegisterArgs, reply *ClientRegisterReply) error {
+	rep, err := s.node.ClientRegister(req)
+	*reply = rep
+	return err
 }
 
 //ClientRequestWrapper
-func (s *RaftRPCWrapper) ClientRequestRPC(ctx context.Context, req *ClientRequestArgs) (*ClientReply, error) {
-	var reply ClientReply
-	var err error
-	err = s.node.ClientRequest(req, &reply)
-	return &reply, err
+func (s *RaftRPCWrapper) ClientRequestRPC(req *ClientRequestArgs, reply *ClientReply) error {
+	rep, err := s.node.ClientRequest(req)
+	*reply = rep
+	return err
 }
 
 //GetTermWrapper
-func (s *RaftRPCWrapper) GetTermRPC(ctx context.Context, req *GetTermRequest) (*GetTermReply, error) {
-	var reply GetTermReply
-	err := s.node.GetTerm(req, &reply)
-	reply.Success = err == nil
-	return &reply, err
+func (s *RaftRPCWrapper) GetTermRPC(req *GetTermRequest, reply *GetTermReply) error {
+	rep, err := s.node.GetTerm(req)
+	*reply = rep
+	return err
 }
 
 //GetStateWrapper
-func (s *RaftRPCWrapper) GetStateRPC(ctx context.Context, req *GetStateRequest) (*GetStateReply, error) {
-	var reply GetStateReply
-	err := s.node.GetState(req, &reply)
-	reply.Success = err == nil
-	return &reply, err
+func (s *RaftRPCWrapper) GetStateRPC(req *GetStateRequest, reply *GetStateReply) error {
+	rep, err := s.node.GetState(req)
+	*reply = rep
+	return err
 }
 
 //EnableNodeWrapper
-func (s *RaftRPCWrapper) EnableNodeRPC(ctx context.Context, req *EnableNodeRequest) (*EnableNodeReply, error) {
-	var reply EnableNodeReply
-	err := s.node.EnableNode(req, &reply)
-	reply.Success = err == nil
-	return &reply, err
+func (s *RaftRPCWrapper) EnableNodeRPC(req *EnableNodeRequest, reply *EnableNodeReply) error {
+	rep, err := s.node.EnableNode(req)
+	*reply = rep
+	return err
 }
 
 //DisableNodeWrapper
-func (s *RaftRPCWrapper) DisableNodeRPC(ctx context.Context, req *DisableNodeRequest) (*DisableNodeReply, error) {
-	var reply DisableNodeReply
-	err := s.node.DisableNode(req, &reply)
-	reply.Success = err == nil
-	return &reply, err
+func (s *RaftRPCWrapper) DisableNodeRPC(req *DisableNodeRequest, reply *DisableNodeReply) error {
+	rep, err := s.node.DisableNode(req)
+	*reply = rep
+	return err
 }
 
 //SetNodetoNodeWrapper
-func (s *RaftRPCWrapper) SetNodetoNodeRPC(ctx context.Context, req *SetNodetoNodeRequest) (*SetNodetoNodeReply, error) {
-	var reply SetNodetoNodeReply
-	err := s.node.SetNodetoNode(req, &reply)
-	reply.Success = err == nil
-	return &reply, err
+func (s *RaftRPCWrapper) SetNodetoNodeRPC(req *SetNodetoNodeRequest, reply *SetNodetoNodeReply) error {
+	rep, err := s.node.SetNodetoNode(req)
+	*reply = rep
+	return err
 }

@@ -3,10 +3,11 @@ package raft
 import (
 	"fmt"
 
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
+	//	"golang.org/x/net/context"
+	//	"google.golang.org/grpc"
 	//"net"
-	//"net/rpc"
+	"net/rpc"
+	"os"
 	"time"
 )
 
@@ -15,24 +16,22 @@ const (
 )
 
 //RPC client connection map
-var rClientsMap = make(map[string]*rClient)
+//var rClientsMap = make(map[string]*rClient)
+var replicaConn = make(map[string]*rpc.Client)
+var replicaConnRetry = make(map[string]int)
 
-//var replicaConn = make(map[string]*grpc.ClientConn)
-
-type rClient struct {
+/*type rClient struct {
 	rpcClient RaftRPCClient
 	conn      *grpc.ClientConn
 	cnt       int
-}
+}*/
 
 //JoinRPC
 func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
+	fmt.Printf("Join RPC Enter")
 	req := JoinRequest{RemoteNode: remoteNode, FromNode: fromNode}
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return err
-	}
-	reply, err := client.JoinRPC(context.Background(), &req)
+	reply := new(JoinReply)
+	err := makeRemoteCall(remoteNode, "JoinRPC", &req, &reply)
 	if err != nil {
 		return err
 	}
@@ -40,11 +39,13 @@ func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
 		return fmt.Errorf("Unable to join cluster")
 	}
 
-	return err
+	fmt.Printf("Join RPC Exit")
+	return nil
 }
 
 //StartRPC
 func StartRPC(remoteNode *NodeAddr, otherNodes []*NodeAddr) error {
+	fmt.Printf("Start RPC Enter")
 	req := StartRequest{}
 	req.RemoteNode = remoteNode
 	nodes := make([]*NodeAddr, len(otherNodes))
@@ -52,11 +53,8 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []*NodeAddr) error {
 		nodes[i] = n
 	}
 	req.OtherNodes = nodes
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return err
-	}
-	reply, err := client.StartRPC(context.Background(), &req)
+	reply := new(StartReply)
+	err := makeRemoteCall(remoteNode, "StartRPC", &req, &reply)
 	if err != nil {
 		return err
 	}
@@ -64,6 +62,7 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []*NodeAddr) error {
 		return fmt.Errorf("Unable to Start")
 	}
 
+	fmt.Printf("Start RPC Exit")
 	return err
 }
 
@@ -74,19 +73,13 @@ func RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs) (*RequestVoteRepl
 		r.INF("ReqVOTE send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
 	}*/
-	var err error
-	var reply *RequestVoteReply
-	client, err := getClient(remoteNode)
+	reply := new(RequestVoteReply)
+	err := makeRemoteCall(remoteNode, "RequestVoteRPC", &req, &reply)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(RPCTimeout))
-	defer cancel()
-	reply, err = client.RequestVoteRPC(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	return reply, nil
 }
 
 // Append Entries RPC
@@ -97,19 +90,13 @@ func AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntri
 		r.INF("AppEntries send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
 	}*/
-	var err error
-	var reply *AppendEntriesReply
-	client, err := getClient(remoteNode)
+	reply := new(AppendEntriesReply)
+	err := makeRemoteCall(remoteNode, "AppendEntriesRPC", &req, &reply)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(RPCTimeout))
-	defer cancel()
-	reply, err = client.AppendEntriesRPC(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	return reply, nil
 }
 
 /////////////////////////////////////////
@@ -118,24 +105,24 @@ func AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntri
 
 //Register Client
 func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*ClientRegisterReply, error) {
-	client, err := getClient(remoteNode)
+	reply := new(ClientRegisterReply)
+	err := makeRemoteCall(remoteNode, "ClientRegisterRequestRPC", &request, &reply)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(4000))
-	defer cancel()
-	return client.ClientRegisterRequestRPC(ctx, &request)
 }
 
 //Request
 func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientReply, error) {
-	client, err := getClient(remoteNode)
+	reply := new(ClientReply)
+	err := makeRemoteCall(remoteNode, "ClientRequestRPC", &request, &reply)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(4000))
-	defer cancel()
-	return client.ClientRequestRPC(ctx, &request)
 }
 
 /////////////////////////////////////////
@@ -145,97 +132,84 @@ func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientR
 //GetTerm
 func GetTermRPC(remoteNode *NodeAddr) (int32, error) {
 	request := GetTermRequest{RemoteNode: remoteNode}
+	reply := new(GetTermReply)
 
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return 0, err
-	} else {
-		reply, err := client.GetTermRPC(context.Background(), &request)
-		return reply.Term, err
-	}
+	err := makeRemoteCall(remoteNode, "GetTermRPC", &request, &reply)
+	return reply.Term, err
 }
 
 //GetState
 func GetStateRPC(remoteNode *NodeAddr) (RaftState, error) {
 	request := GetStateRequest{RemoteNode: remoteNode}
+	reply := new(GetStateReply)
 
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return 0, err
-	} else {
-		reply, err := client.GetStateRPC(context.Background(), &request)
-		return reply.State, err
-	}
+	err := makeRemoteCall(remoteNode, "GetStateRPC", &request, &reply)
+	return reply.State, err
 }
 
 //Enable Node
 func EnableNodeRPC(remoteNode *NodeAddr) error {
 	request := EnableNodeRequest{}
-
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return err
-	}
-	_, err = client.EnableNodeRPC(context.Background(), &request)
+	reply := new(EnableNodeReply)
+	err := makeRemoteCall(remoteNode, "EnableNodeRPC", &request, &reply)
 	return err
-
 }
 
 //Disable Node
 func DisableNodeRPC(remoteNode *NodeAddr) error {
 	request := DisableNodeRequest{}
-
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return err
-	}
-
-	_, err = client.DisableNodeRPC(context.Background(), &request)
+	reply := new(DisableNodeReply)
+	err := makeRemoteCall(remoteNode, "DisableNodeRPC", &request, &reply)
 	return err
 }
 
 //SetNodetoNode
 func SetNodetoNodeRPC(remoteNode *NodeAddr, n NodeAddr, val bool) error {
 	request := SetNodetoNodeRequest{ToNode: &n, Enable: val}
-
-	client, err := getClient(remoteNode)
-	if err != nil {
-		return err
-	}
-	_, err = client.SetNodetoNodeRPC(context.Background(), &request)
+	reply := new(SetNodetoNodeReply)
+	err := makeRemoteCall(remoteNode, "SetNodetoNodeRPC", &request, &reply)
 	return err
 }
 
-func getClient(remoteAddr *NodeAddr) (RaftRPCClient, error) {
-	rc, ok := rClientsMap[remoteAddr.Addr]
+//makeRemoteCall
+func makeRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}) error {
+	var err error
+	client, ok := replicaConn[remoteAddr.Addr]
 	if !ok {
-		conn, err := grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
-		if err != nil {
-			return nil, err
+		if replicaConnRetry[remoteAddr.Addr] > 5 {
+			fmt.Fprintf(os.Stderr, "Dial MaxRetry for: %s\n", remoteAddr.Addr)
+			return fmt.Errorf("Dial MaxRetry. Server Dead\n")
+		} else {
+			client, err = rpc.Dial("unix", remoteAddr.Addr)
+			//client, err = rpc.Dial("tcp4", remoteAddr.Addr)
+			if err != nil {
+				replicaConnRetry[remoteAddr.Addr] = replicaConnRetry[remoteAddr.Addr] + 1
+				fmt.Fprintf(os.Stderr, "Dial Failed: %v\n", err)
+				return err
+			}
+			replicaConnRetry[remoteAddr.Addr] = 0
+			replicaConn[remoteAddr.Addr] = client
 		}
-		rc = &rClient{}
-		rc.rpcClient = NewRaftRPCClient(conn)
-		rc.conn = conn
-		rc.cnt = 0
-		rClientsMap[remoteAddr.Addr] = rc
-	} else if rc.cnt > 50 {
-		var err error
-		var conn *grpc.ClientConn
-		fmt.Printf("Closing Connection to %s", remoteAddr.Addr)
-		err = rc.conn.Close()
-		if err != nil {
-			fmt.Printf("Error Reconnecting to %s", remoteAddr.Addr)
-			return nil, err
-		}
-		conn, err = grpc.Dial(remoteAddr.Addr, grpc.WithInsecure(), grpc.WithTimeout(time.Millisecond*200))
-		if err != nil {
-			return nil, err
-		}
-		rc.rpcClient = NewRaftRPCClient(conn)
-		rc.conn = conn
-		rc.cnt = 0
-		rClientsMap[remoteAddr.Addr] = rc
 	}
-	rc.cnt++
-	return rc.rpcClient, nil
+
+	fullProcName := fmt.Sprintf("%v.%v", remoteAddr.Addr, procName)
+	//	err = client.Call(fullProcName, request, reply)
+	call := client.Go(fullProcName, request, reply, nil)
+	select {
+	case <-call.Done:
+		if call.Error != nil {
+			fmt.Fprintf(os.Stderr, "Client Call Failed: %v\n", err)
+			client.Close()
+			delete(replicaConn, remoteAddr.Addr)
+			return call.Error
+		} else {
+			return nil
+		}
+	case <-time.After(time.Duration(80) * time.Millisecond):
+		fmt.Fprintf(os.Stderr, "Client Call Timeout: %v\n", err)
+		client.Close()
+		delete(replicaConn, remoteAddr.Addr)
+		return fmt.Errorf("Client call Timeout")
+	}
+
 }
