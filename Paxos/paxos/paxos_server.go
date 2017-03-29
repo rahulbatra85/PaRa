@@ -1,16 +1,14 @@
 package paxos
 
-import ()
-
 func (p *PaxosNode) run() {
-	p.INF("PaxosServer Running")
+	p.INF("PaxosServer Run Enter")
 
 	//Create Replica
-	p.r = CreateReplica(p.othersAddr, p.App)
+	p.r = MakeReplica(p.othersAddr, p.app)
 	//Create Leader
-	p.l = CreateLeader(p.othersAddr, p.localAddr)
+	p.l = MakeLeader(p.othersAddr, p.localAddr)
 	//Create Acceptor
-	p.a = CreateAcceptor()
+	p.a = MakeAcceptor()
 
 	//Start Replica
 	p.run_replica(p.r)
@@ -18,4 +16,5 @@ func (p *PaxosNode) run() {
 	p.run_leader(p.l)
 	//Start Acceptor
 	p.run_acceptor(p.a)
+	p.INF("PaxosServer Run Exit")
 }

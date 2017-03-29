@@ -1,26 +1,42 @@
 package paxos
 
+import (
+	"crypto/sha1"
+	"math/big"
+)
+
+type ClientReplyCode int
+
+const (
+	ClientReplyCode_REQUEST_FAILED ClientReplyCode = iota
+	ClientReplyCode_REQUEST_SUCCESSFUL
+	ClientReplyCode_RETRY
+	ClientReplyCode_NOT_LEADER
+)
+
+type OpType int
+
+const (
+	OpType_CLIENT_REGISTRATION OpType = iota
+	OpType_GET                        = 1
+	OpType_PUT                        = 2
+)
+
 type NodeAddr struct {
 	Id   string
 	Addr string
 }
 
 type Command struct {
-	ClientNodeAddr NodeAddr
-	Cid            int
-	SeqNum         int
-	Op             Operation
+	ClientId int
+	SeqNum   int
+	Op       Operation
 }
 
-//\todo make it generic
 type Operation struct {
-	OpType string
-	Key    string
-	Data   string
-}
-
-type Application interface {
-	ApplyOperation(op Operation) string
+	Type  OpType
+	Key   string
+	Value string
 }
 
 //Ballot Numbers are lexicographically ordered

@@ -3,10 +3,18 @@ package paxos
 import (
 	"fmt"
 	"net/rpc"
+	"os"
+	"time"
+)
+
+const (
+	RPCTimeout       = 100
+	ClientRPCTimeout = 1000
 )
 
 //RPC client connection map
 var replicaConn = make(map[string]*rpc.Client)
+var replicaConnRetry = make(map[string]int)
 
 //JoinRPC
 type JoinRequest struct {
@@ -19,8 +27,8 @@ type JoinReply struct {
 
 func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
 	req := JoinRequest{RemoteNode: *remoteNode, FromAddr: *fromNode}
-	var reply JoinReply
-	err := makeRemoteCall(remoteNode, "JoinWrapper", req, &reply)
+	reply = new(JoinReply)
+	err := doRemoteCall(remoteNode, "JoinWrapper", &req, &reply, RPCTimeout)
 	if err != nil {
 		return err
 	}
@@ -28,7 +36,7 @@ func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
 		return fmt.Errorf("Unable to join cluster")
 	}
 
-	return err
+	return nil
 }
 
 //StartRPC
@@ -49,8 +57,8 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []NodeAddr) error {
 		req.OtherNodes[i].Id = n.Id
 		req.OtherNodes[i].Addr = n.Addr
 	}
-	var reply StartReply
-	err := makeRemoteCall(remoteNode, "StartWrapper", req, &reply)
+	reply := new(StartReply)
+	err := doRemoteCall(remoteNode, "StartWrapper", &req, &reply, RPCTimeout)
 	if err != nil {
 		return err
 	}
@@ -73,14 +81,13 @@ type ProposeReply struct {
 }
 
 func (p *PaxosNode) ProposeRPC(remoteNode *NodeAddr, request ProposeRequest) (*ProposeReply, error) {
-	//\todo add enable check
-	var reply ProposeReply
-	err := makeRemoteCall(remoteNode, "ProposeWrapper", request, &reply)
+	reply = new(ProposeReply)
+	err := doRemoteCall(remoteNode, "ProposeWrapper", request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, err
 	}
-
-	return &reply, err
 }
 
 //Decision
@@ -94,13 +101,13 @@ type DecisionReply struct {
 }
 
 func (p *PaxosNode) DecisionRPC(remoteNode *NodeAddr, request DecisionRequest) (*DecisionReply, error) {
-	var reply DecisionReply
-	err := makeRemoteCall(remoteNode, "DecisionWrapper", request, &reply)
+	reply := new(DecisionReply)
+	err := doRemoteCall(remoteNode, "DecisionWrapper", request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, err
 	}
-
-	return &reply, err
 }
 
 //P1a
@@ -115,13 +122,13 @@ type P1aReply struct {
 }
 
 func (p *PaxosNode) P1aRPC(remoteNode *NodeAddr, request P1aRequest) (*P1aReply, error) {
-	var reply P1aReply
-	err := makeRemoteCall(remoteNode, "P1aWrapper", request, &reply)
+	reply := new(P1aReply)
+	err := doRemoteCall(remoteNode, "P1aWrapper", request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, err
 	}
-
-	return &reply, err
 }
 
 //P2a
@@ -136,13 +143,13 @@ type P2aReply struct {
 }
 
 func (p *PaxosNode) P2aRPC(remoteNode *NodeAddr, request P2aRequest) (*P2aReply, error) {
-	var reply P2aReply
-	err := makeRemoteCall(remoteNode, "P2aWrapper", request, &reply)
+	reply := new(P2aReply)
+	err := doRemoteCall(remoteNode, "P2aWrapper", request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, err
 	}
-
-	return &reply, err
 }
 
 //P1b
@@ -158,13 +165,13 @@ type P1bReply struct {
 }
 
 func (p *PaxosNode) P1bRPC(remoteNode *NodeAddr, request P1bRequest) (*P1bReply, error) {
-	var reply P1bReply
-	err := makeRemoteCall(remoteNode, "P1bWrapper", request, &reply)
+	reply := new(P1bReply)
+	err := doRemoteCall(remoteNode, "P1bWrapper", request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, err
 	}
-
-	return &reply, err
 }
 
 //P2b
@@ -179,93 +186,99 @@ type P2bReply struct {
 }
 
 func (p *PaxosNode) P2bRPC(remoteNode *NodeAddr, request P2bRequest) (*P2bReply, error) {
-	var reply P2bReply
-	err := makeRemoteCall(remoteNode, "P2bWrapper", request, &reply)
+	reply := new(P2bReply)
+	err := doRemoteCall(remoteNode, "P2bWrapper", &request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, err
 	}
-
-	return &reply, err
 }
 
 /////////////////////////////////////////
 //Client
 /////////////////////////////////////////
-
-//Request
-type ClientRequest struct {
-	Cmd Command
+//Register
+type ClientRegisterArgs struct {
+	FromNode NodeAddr
 }
 
-type ClientReply struct {
-	Success bool
+type ClientRegisterReply struct {
+	Code     ClientReplyCode
+	ClientId int
 }
 
-func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequest) (*ClientReply, error) {
-	var reply ClientReply
-	err := makeRemoteCall(remoteNode, "ClientRequestWrapper", request, &reply)
+//Register Client
+func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*ClientRegisterReply, error) {
+	reply := new(ClientRegisterReply)
+	err := doRemoteCall(remoteNode, "ClientRegisterWrapper", &request, &reply, ClientRPCTimeout)
 	if err != nil {
 		return nil, err
+	} else {
+		return reply, nil
 	}
-
-	return &reply, err
 }
 
-/////////////////////////////////////////
-//Node Manager
-/////////////////////////////////////////
-
-//GetState
-type GetStateRequest struct {
-	RemoteNode NodeAddr
-	FromAddr   NodeAddr
+//Request
+type ClientRequestArgs struct {
+	Cmd Command
+}
+type ClientReply struct {
+	Code       ClientReplyCode
+	LeaderNode *NodeAddr
+	Value      string
+	SeqNum     int
 }
 
-type GetStateReply struct {
-	Success bool
-	State   int
-}
-
-func GetStateRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
-	req := GetStateRequest{RemoteNode: *remoteNode, FromAddr: *fromNode}
-
-	var reply GetStateReply
-	err := makeRemoteCall(remoteNode, "GetStateWrapper", req, &reply)
+//Request
+func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientReply, error) {
+	reply := new(ClientReply)
+	err := doRemoteCall(remoteNode, "ClientRequestWrapper", &request, &reply, ClientRPCTimeout)
 	if err != nil {
-		return err
+		return nil, err
+	} else {
+		return reply, nil
 	}
-	if !reply.Success {
-		return fmt.Errorf("Unable to get state")
-	}
-
-	return err
 }
 
-//Enable Node
-
-//Disable Node
-
-//SetSend
-
-//SetReceive
-
-//makeRemoteCall
-func makeRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}) error {
+//doRemoteCall
+func doRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}, timeout int) error {
 	var err error
 	client, ok := replicaConn[remoteAddr.Addr]
 	if !ok {
-		client, err = rpc.Dial("tcp", remoteAddr.Addr)
-		if err != nil {
-			return err
+		if replicaConnRetry[remoteAddr.Addr] > 5 {
+			fmt.Fprintf(os.Stderr, "Dial MaxRetry for: %s\n", remoteAddr.Addr)
+			return fmt.Errorf("Dial MaxRetry. Server Dead\n")
+		} else {
+			client, err = rpc.Dial("unix", remoteAddr.Addr)
+			//client, err = rpc.Dial("tcp4", remoteAddr.Addr)
+			if err != nil {
+				replicaConnRetry[remoteAddr.Addr] = replicaConnRetry[remoteAddr.Addr] + 1
+				fmt.Fprintf(os.Stderr, "Dial Failed: %v\n", err)
+				return err
+			}
+			replicaConnRetry[remoteAddr.Addr] = 0
+			replicaConn[remoteAddr.Addr] = client
 		}
-		replicaConn[remoteAddr.Addr] = client
 	}
 
 	fullProcName := fmt.Sprintf("%v.%v", remoteAddr.Addr, procName)
-	err = client.Call(fullProcName, request, reply)
-	if err != nil {
+	call := client.Go(fullProcName, request, reply, nil)
+	select {
+	case <-call.Done:
+		if call.Error != nil {
+			fmt.Fprintf(os.Stderr, "Client Call Failed: %v\n", err)
+			client.Close()
+			delete(replicaConn, remoteAddr.Addr)
+			return call.Error
+		} else {
+			return nil
+		}
+	case <-time.After(time.Duration(timeout) * time.Millisecond):
+		fmt.Fprintf(os.Stderr, "Client Call Timeout: %v\n", err)
+		client.Close()
 		delete(replicaConn, remoteAddr.Addr)
+		return fmt.Errorf("Client call Timeout")
 	}
-	return err
 
 }

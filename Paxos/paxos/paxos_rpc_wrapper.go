@@ -64,7 +64,6 @@ func (s *PaxosRPCServer) P1aWrapper(req *P1aRequest, reply *P1aReply) error {
 
 //P2a Wrapper
 func (s *PaxosRPCServer) P2aWrapper(req *P2aRequest, reply *P2aReply) error {
-	//\todo add enable check
 	err := s.node.P2a(req)
 	reply.Success = err == nil
 	return err
@@ -72,7 +71,6 @@ func (s *PaxosRPCServer) P2aWrapper(req *P2aRequest, reply *P2aReply) error {
 
 //P1b Wrapper
 func (s *PaxosRPCServer) P1bWrapper(req *P1bRequest, reply *P1bReply) error {
-	//\todo add enable check
 	err := s.node.P1b(req)
 	reply.Success = err == nil
 	return err
@@ -80,16 +78,23 @@ func (s *PaxosRPCServer) P1bWrapper(req *P1bRequest, reply *P1bReply) error {
 
 //P2b Wrapper
 func (s *PaxosRPCServer) P2bWrapper(req *P2bRequest, reply *P2bReply) error {
-	//\todo add enable check
 	err := s.node.P2b(req)
 	reply.Success = err == nil
 	return err
 }
 
-//GetStateWrapper
-func (s *PaxosRPCServer) GetStateWrapper(req *GetStateRequest, reply *GetStateReply) error {
-	err, state := s.node.GetState(req)
+//
+//ClientRegisterWrapper
+func (s *PaxosRPCServer) ClientRegisterWrapper(req *ClientRegisterArgs, reply *ClientRegisterReply) error {
+	err := s.node.ClientRegisterHdl(req)
 	reply.Success = err == nil
-	reply.State = state
+	return err
+}
+
+//
+//ClientRequestWrapper
+func (s *PaxosRPCServer) ClientRequestWrapper(req *ClientRequestArgs, reply *ClientReply) error {
+	err := s.node.ClientRequestHdl(req)
+	reply.Success = err == nil
 	return err
 }

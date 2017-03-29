@@ -8,7 +8,7 @@ type Acceptor struct {
 	P2aCh chan P2aRequest
 }
 
-func CreateAcceptor() *Acceptor {
+func MakeAcceptor() *Acceptor {
 	var a = Acceptor{}
 
 	a.P1aCh = make(chan P1aRequest)

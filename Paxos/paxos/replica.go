@@ -5,7 +5,7 @@ import (
 )
 
 type Replica struct {
-	App       *Application
+	App       *KVApp
 	SlotIn    int
 	SlotOut   int
 	Requests  []Cmd
@@ -17,7 +17,7 @@ type Replica struct {
 	DecCh chan DecisionRequest
 }
 
-func CreateReplica(leaders []NodeAddr, app *Application) *Replica {
+func MakeReplica(leaders []NodeAddr, app *KVApp) *Replica {
 	var r = Replica{}
 	r.App = app
 	r.SlotIn = 1
@@ -60,11 +60,9 @@ func (p *PaxosNode) perform(r *Replica, c Command) {
 
 	req := ResponseRequest{Cmd: c, Result: result}
 	go ResponseRPC(c.ClientNodeAddr, req)
-
 }
 
 func (p *PaxosNode) run_replica(r *Replica) {
-
 	for {
 		select {
 		case msg := <-r.ReqCh:

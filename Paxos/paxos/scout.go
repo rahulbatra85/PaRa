@@ -16,7 +16,7 @@ type Scout struct {
 	P1bCh     chan P1bRequest
 }
 
-func CreateScout(acceptors []NodeAddr, b BallotNum, id string) *Scout {
+func MakeScout(acceptors []NodeAddr, b BallotNum, id string) *Scout {
 	var s Scout
 	s.Id = id
 	s.Acceptors = append(s.Acceptors, acceptors...)
@@ -33,7 +33,7 @@ func CreateScout(acceptors []NodeAddr, b BallotNum, id string) *Scout {
 }
 
 func (p *PaxosNode) run_scout(s *Scout) {
-
+	p.DBG("run_scout Enter")
 	//send to all acceptors
 	req := P1aRequest{ScoutId: s.Id, Leader: p.localAddr, Bnum: s.Bnum}
 	for n := range s.Acceptors {
@@ -67,4 +67,6 @@ func (p *PaxosNode) run_scout(s *Scout) {
 	l.muScouts.Lock()
 	delete(l.Scouts, s.Id)
 	l.muScouts.Unlock()
+
+	p.DBG("run_scout Exit")
 }

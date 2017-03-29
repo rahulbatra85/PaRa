@@ -1,10 +1,5 @@
 package paxos
 
-//
-//Note: The startup code is derived and adapted from labs assignments of MIT 6.824 and Brown CS 138 courses
-//These are distributed systems courses.
-//
-
 import (
 	"crypto/sha1"
 	"fmt"
@@ -16,36 +11,25 @@ import (
 )
 
 type PaxosNode struct {
-	mu          sync.Mutex
-	Id          string       //Id (hash address)
-	listener    net.Listener //Listener
-	port        int          //ListenerPort
-	localAddr   NodeAddr     //LocalAddr
-	othersAddr  []NodeAddr   //OtherAddrs
-	nodeMgrAddr NodeAddr     //Node Manager
-	app         *Application
-
-	config    *PaxosConfig //Config
-	RPCServer *PaxosRPCServer
-	//Pointer to RPC server
-	//NodeRPC policy
-
-	//Data
-	ballotNum int
+	mu         sync.Mutex
+	Id         string          //Id (hashed address)
+	listener   net.Listener    //Listener
+	port       int             //ListenerPort
+	localAddr  NodeAddr        //LocalAddr
+	othersAddr []NodeAddr      //OtherAddrs
+	config     *PaxosConfig    //Config
+	RPCServer  *PaxosRPCServer //Pointer to RPC server
 
 	//Replica, Leader, and Acceptor
 	r *Replica
 	l *Leader
 	a *Acceptor
 
-	//Channels
-
-	//Application State
+	//Application
+	app *KVApp
 }
 
-func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config *PaxosConfig) (pp *PaxosNode, app *Application) {
-	//Inputs: Port, RemoteAddr, Config
-
+func MakePaxos(port int, remoteNodeAddr *NodeAddr, config *PaxosConfig) (pp *PaxosNode) {
 	//PaxosNode
 	var p PaxosNode
 	pp = &p
@@ -53,22 +37,11 @@ func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config
 	//Set config
 	p.config = config
 
-	//init PaxosNode variables
-	//Init channels
 	//app state
-	//etc
-	p.app = app
-	if nodeMgrAddr != nil {
-		p.nodeMgrAddr = *nodeMgrAddr
-	} else {
-		p.nodeMgrAddr.Id = ""
-		p.nodeMgrAddr.Addr = ""
-	}
+	p.app = MakeKVApp()
 
 	//Set up logging
 	InitTracers()
-
-	//Set communication
 
 	//Create listener
 	conn, err := CreateListener(port)
@@ -76,14 +49,11 @@ func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config
 		fmt.Printf("Error Creating Listener =%v\n", err)
 		return
 	}
-
 	p.Id = HashAddr(conn.Addr().String(), p.config.NodeIdSize) //Hash Addr to determine ID
 	p.INF("Created Listener %v\n", conn.Addr())
 	p.listener = conn //Set listener
 	p.port = port     //Set listen Port
 	p.localAddr = NodeAddr{Id: p.Id, Addr: conn.Addr().String()}
-
-	//Init stable storage
 
 	//Register and Start RPC server
 	p.RPCServer = &PaxosRPCServer{pp}
@@ -98,7 +68,7 @@ func MakePaxos(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config
 		go p.startNodes()
 	}
 
-	return
+	return pp
 }
 
 func (p *PaxosNode) startNodes() {
@@ -115,10 +85,6 @@ func (p *PaxosNode) startNodes() {
 			fmt.Printf("(%v) Starting node-%v\n", p.Id, otherNode.Id)
 			StartRPC(&otherNode, p.othersAddr)
 		}
-	}
-
-	if p.nodeMgrAddr.Id != "" && p.nodeMgrAddr.Addr != "" {
-		ReadyNotificationRPC(&p.nodeMgrAddr, &p.localAddr)
 	}
 
 	go p.run()

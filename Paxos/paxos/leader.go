@@ -27,7 +27,7 @@ type PreemptedMsg struct {
 	Bp BallotNum
 }
 
-func CreateLeader(acceptorsReplicas []NodeAddr, lid NodeAddr) *Leader {
+func MakeLeader(acceptorsReplicas []NodeAddr, lid NodeAddr) *Leader {
 	var l Leader
 
 	l.AcceptorsReplicas = append(l.AcceptorsReplicas, acceptorsReplicas...)

@@ -5,7 +5,7 @@ import (
 )
 
 //JoinRPC Handler
-func (p *PaxosNode) Join(request *JoinRequest) error {
+func (p *PaxosNode) JoinHdl(request *JoinRequest) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -20,7 +20,7 @@ func (p *PaxosNode) Join(request *JoinRequest) error {
 }
 
 //StartRPC Handler
-func (p *PaxosNode) Start(request *StartRequest) error {
+func (p *PaxosNode) StartHdl(request *StartRequest) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -43,30 +43,30 @@ func (p *PaxosNode) Start(request *StartRequest) error {
 	return nil
 }
 
-func (p *PaxosNode) Propose(request *ProposeRequest) error {
+func (p *PaxosNode) ProposeHdl(request *ProposeRequest) error {
 	//forward to leader
 	p.l.ProposeCh <- request
 	return nil
 }
-func (p *PaxosNode) Decision(request *DecisionRequest) error {
+func (p *PaxosNode) DecisionHdl(request *DecisionRequest) error {
 	//forward to replica
 	p.r.DecCh <- request
 	return nil
 }
 
-func (p *PaxosNode) P1a(request *P1aRequest) error {
+func (p *PaxosNode) P1aHdl(request *P1aRequest) error {
 	//forward to acceptor
 	p.a.P1aCh < request
 	return nil
 }
 
-func (p *PaxosNode) P2a(request *P2aRequest) error {
+func (p *PaxosNode) P2aHdl(request *P2aRequest) error {
 	//forward to acceptor
 	p.a.P2aCh <- request
 	return nil
 }
 
-func (p *PaxosNode) P1b(request *P1bRequest) error {
+func (p *PaxosNode) P1bHdl(request *P1bRequest) error {
 	//forward to scout
 	//See if Scout is still active.Otherwise, ignore
 	p.l.MuScouts.RLock()
@@ -76,7 +76,7 @@ func (p *PaxosNode) P1b(request *P1bRequest) error {
 	p.l.MuScouts.Unlock()
 }
 
-func (p *PaxosNode) P2b(request *P2bRequest) error {
+func (p *PaxosNode) P2bHdl(request *P2bRequest) error {
 	//forward to commander
 	//See if Commander is still active. Otherwise, ignore
 	p.l.MuCommanders.RLock()
@@ -86,10 +86,12 @@ func (p *PaxosNode) P2b(request *P2bRequest) error {
 	p.l.MuScouts.Unlock()
 }
 
-//GetState
-func (p *PaxosNode) GetState(request *GetStateRequest) (error, int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *PaxosNode) ClientRegisterHdl(request *ClientRegisterArgs) error {
+	p.r.ReqCh <- request
+	return nil
+}
 
-	return nil, p.ballotNum
+func (p *PaxosNode) ClientRequestHdl(request *ClientRequestArgs) error {
+	p.r.ReqCh <- request
+	return nil
 }

@@ -12,7 +12,7 @@ type Commander struct {
 	P2bCh   chan P2bRequest
 }
 
-func CreateCommander(nodes []NodeAddr, pval Pvalue, id string) *Commander {
+func MakeCommander(nodes []NodeAddr, pval Pvalue, id string) *Commander {
 	var c Commander
 	c.Id = id
 	c.Nodes = append(p.a.Nodes, nodes...)
@@ -29,7 +29,7 @@ func CreateCommander(nodes []NodeAddr, pval Pvalue, id string) *Commander {
 }
 
 func (p *PaxosNode) run_commander(c *Commander) {
-
+	p.INF("run_commander Enter")
 	//send to all acceptors
 	req = P2aRequest{CommanderId: c.Id, Leader: p.localAddr, Pval: c.Pval}
 	for n := range c.Nodes {
@@ -67,4 +67,5 @@ func (p *PaxosNode) run_commander(c *Commander) {
 	l.MuCommanders.Lock()
 	delete(l.Commanders, c.Id)
 	l.MuCommanders.Unlock()
+	p.INF("run_commander Exit")
 }

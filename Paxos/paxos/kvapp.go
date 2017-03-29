@@ -1,6 +1,7 @@
-package paxos
+package raft
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -11,23 +12,28 @@ type KVApp struct {
 	mu   sync.Mutex
 }
 
-func CreateKVApp() *KVApp {
+func MakeKVApp() *KVApp {
 	var kv KVApp
 	kv.kvds = make(map[string]string)
 
 	return &kv
 }
 
-func (kv *KVApplication) ApplyOperation(op *Operation) string {
+func (kv *KVApp) ApplyOperation(cmd Command) (string, error) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
-	var ret string
 
-	if op.Name == "GET" || op.Name == "get" {
-		ret = kvds[op.Key]
-	} else if op.Name == "PUT" || op.Name == "put" {
-		ret = op.Data
+	if cmd.Op.Type == OpType_GET {
+		value, ok := kv.kvds[cmd.Op.Key]
+		if !ok {
+			return "", fmt.Errorf("Key not found")
+		} else {
+			return value, nil
+		}
+	} else if cmd.Op.Type == OpType_PUT {
+		kv.kvds[cmd.Op.Key] = cmd.Op.Value
+		return "", nil
+	} else {
+		return "", fmt.Errof("Invalid Command")
 	}
-
-	return ret
 }
