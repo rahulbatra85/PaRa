@@ -2,7 +2,7 @@ package paxos
 
 type Acceptor struct {
 	Bnum     BallotNum
-	Accepted Pvalue
+	Accepted map[int]Pvalue
 
 	P1aCh chan P1aRequest
 	P2aCh chan P2aRequest
@@ -11,6 +11,7 @@ type Acceptor struct {
 func MakeAcceptor() *Acceptor {
 	var a = Acceptor{}
 
+	a.Accepted = make(map[int]Pvalue)
 	a.P1aCh = make(chan P1aRequest)
 	a.P2aCh = make(chan P2aRequest)
 
@@ -21,19 +22,33 @@ func (p *PaxosNode) run_acceptor(a *Acceptor) {
 	for {
 		select {
 		case msg := <-a.P1aCh:
-			if msg.B > a.Bnum {
-				a.Bnum = msg.B
+			if CompareBallotNum(msg.Bnum, a.Bnum) == 1 {
+				a.Bnum = msg.Bnum
 			}
 			//Send RPC to scout
 			req := P1bRequest{ScoutId: msg.ScoutId, Acceptor: p.localAddr, Bnum: a.Bnum, Rval: a.Accepted}
-			p.P1bRPC(msg.Leader, req)
+			go p.P1bRPC(&msg.Leader, req)
 		case msg := <-a.P2aCh:
-			if msg.B == a.Bnum {
-				a.Accepted = msg.Pval
+			if CompareBallotNum(msg.Pval.B, a.Bnum) >= 0 {
+				a.Bnum = msg.Pval.B
 			}
-			//Send RPC to commander
+
+			//Add or Update Pval for the slot in the Accepted Pval set
+			//We implemented the optimization in Sec 4.1 of the paper
+			//Renesse, et. all where acceptor only maintains the
+			//highest pvalue for each slot
+			sPval, ok := a.Accepted[msg.Pval.S]
+			if !ok {
+				a.Accepted[msg.Pval.S] = msg.Pval
+			} else {
+				if CompareBallotNum(msg.Pval.B, sPval.B) == 1 {
+					a.Accepted[msg.Pval.S] = msg.Pval
+				}
+			}
+
+			//Send Response to commander
 			req := P2bRequest{CommanderId: msg.CommanderId, Acceptor: p.localAddr, Bnum: a.Bnum}
-			p.P2bRPC(msg.Leader, req)
+			go p.P2bRPC(&msg.Leader, req)
 		}
 	}
 }

@@ -1,29 +1,27 @@
 package paxos
 
-import (
-	"fmt"
-)
-
 type Commander struct {
 	Id      string
 	Nodes   []NodeAddr
 	Pval    Pvalue
 	WaitFor map[NodeAddr]bool
 	P2bCh   chan P2bRequest
+	L       *Leader
 }
 
-func MakeCommander(nodes []NodeAddr, pval Pvalue, id string) *Commander {
+func MakeCommander(nodes []NodeAddr, pval Pvalue, id string, leader *Leader) *Commander {
 	var c Commander
 	c.Id = id
-	c.Nodes = append(p.a.Nodes, nodes...)
+	c.Nodes = append(c.Nodes, nodes...)
 	c.Pval = pval
 
 	c.WaitFor = make(map[NodeAddr]bool)
-	for n := range nodes {
+	for _, n := range nodes {
 		c.WaitFor[n] = true
 	}
 
 	c.P2bCh = make(chan P2bRequest, len(nodes))
+	c.L = leader
 
 	return &c
 }
@@ -31,41 +29,39 @@ func MakeCommander(nodes []NodeAddr, pval Pvalue, id string) *Commander {
 func (p *PaxosNode) run_commander(c *Commander) {
 	p.INF("run_commander Enter")
 	//send to all acceptors
-	req = P2aRequest{CommanderId: c.Id, Leader: p.localAddr, Pval: c.Pval}
-	for n := range c.Nodes {
+	req := P2aRequest{CommanderId: c.Id, Leader: p.localAddr, Pval: c.Pval}
+	for _, n := range c.Nodes {
 		go func(n *NodeAddr, r P2aRequest) {
 			p.P2aRPC(n, req)
-		}(n, req)
+		}(&n, req)
 	}
 
 	done := false
 	for !done {
 		select {
 		case msg := <-c.P2bCh:
-			if msg.B == c.Pval.B {
-				delete(c.WaitFor, msg.Aid)
+			if CompareBallotNum(msg.Bnum, c.Pval.B) == 0 {
+				delete(c.WaitFor, msg.Acceptor)
 				if len(c.WaitFor) < (len(c.Nodes) / 2) {
 					//Send decision to Replicas
 					req := DecisionRequest{Slot: c.Pval.S, Cmd: c.Pval.C}
-					for n := range c.Nodes {
-						go func(n *NodeAddr, r P2aRequest) {
-							p.DecisionRPC(n, req)
-						}(n, req)
+					for _, n := range c.Nodes {
+						p.DecisionRPC(&n, req)
 					}
-					done := true
+					done = true
 				}
 			} else {
 				//Send preempted to leader
-				m := PreemptedMsg{Bp: s.Bnum}
-				l.PreemptCh <- m
+				m := PreemptedMsg{Bp: msg.Bnum}
+				c.L.PreemptCh <- m
 				done = true
 			}
 		}
 	}
 
 	//Delete this commander
-	l.MuCommanders.Lock()
-	delete(l.Commanders, c.Id)
-	l.MuCommanders.Unlock()
+	c.L.MuCommanders.Lock()
+	delete(c.L.Commanders, c.Id)
+	c.L.MuCommanders.Unlock()
 	p.INF("run_commander Exit")
 }

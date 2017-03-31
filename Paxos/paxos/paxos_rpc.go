@@ -27,7 +27,7 @@ type JoinReply struct {
 
 func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
 	req := JoinRequest{RemoteNode: *remoteNode, FromAddr: *fromNode}
-	reply = new(JoinReply)
+	reply := new(JoinReply)
 	err := doRemoteCall(remoteNode, "JoinWrapper", &req, &reply, RPCTimeout)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ type ProposeReply struct {
 }
 
 func (p *PaxosNode) ProposeRPC(remoteNode *NodeAddr, request ProposeRequest) (*ProposeReply, error) {
-	reply = new(ProposeReply)
+	reply := new(ProposeReply)
 	err := doRemoteCall(remoteNode, "ProposeWrapper", request, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ type P1bRequest struct {
 	ScoutId  string
 	Acceptor NodeAddr
 	Bnum     BallotNum
-	Rval     Pvalue
+	Rval     map[int]Pvalue
 }
 
 type P1bReply struct {
@@ -198,36 +198,16 @@ func (p *PaxosNode) P2bRPC(remoteNode *NodeAddr, request P2bRequest) (*P2bReply,
 /////////////////////////////////////////
 //Client
 /////////////////////////////////////////
-//Register
-type ClientRegisterArgs struct {
-	FromNode NodeAddr
-}
-
-type ClientRegisterReply struct {
-	Code     ClientReplyCode
-	ClientId int
-}
-
-//Register Client
-func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*ClientRegisterReply, error) {
-	reply := new(ClientRegisterReply)
-	err := doRemoteCall(remoteNode, "ClientRegisterWrapper", &request, &reply, ClientRPCTimeout)
-	if err != nil {
-		return nil, err
-	} else {
-		return reply, nil
-	}
-}
 
 //Request
 type ClientRequestArgs struct {
-	Cmd Command
+	Cmd      Command
+	FromNode NodeAddr
 }
 type ClientReply struct {
-	Code       ClientReplyCode
-	LeaderNode *NodeAddr
-	Value      string
-	SeqNum     int
+	Code   ClientReplyCode
+	Value  string
+	SeqNum int
 }
 
 //Request

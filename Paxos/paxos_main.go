@@ -15,7 +15,7 @@ func main() {
 
 	flag.Parse()
 
-	config := paxos.CreatePaxosConfig()
+	config := paxos.MakePaxosConfig()
 
 	var remoteNodeAddr *paxos.NodeAddr
 	if cAddr != "" {

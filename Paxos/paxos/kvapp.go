@@ -1,7 +1,6 @@
-package raft
+package paxos
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -19,21 +18,21 @@ func MakeKVApp() *KVApp {
 	return &kv
 }
 
-func (kv *KVApp) ApplyOperation(cmd Command) (string, error) {
+func (kv *KVApp) ApplyOperation(cmd Command) (string, ClientReplyCode) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
 	if cmd.Op.Type == OpType_GET {
 		value, ok := kv.kvds[cmd.Op.Key]
 		if !ok {
-			return "", fmt.Errorf("Key not found")
+			return "", ClientReplyCode_INVALID_KEY
 		} else {
-			return value, nil
+			return value, ClientReplyCode_REQUEST_SUCCESSFUL
 		}
 	} else if cmd.Op.Type == OpType_PUT {
 		kv.kvds[cmd.Op.Key] = cmd.Op.Value
-		return "", nil
+		return "", ClientReplyCode_REQUEST_SUCCESSFUL
 	} else {
-		return "", fmt.Errof("Invalid Command")
+		return "", ClientReplyCode_INVALID_COMMAND
 	}
 }

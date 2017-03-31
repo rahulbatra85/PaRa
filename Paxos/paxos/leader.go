@@ -5,6 +5,7 @@ import (
 )
 
 type Leader struct {
+	LocalAddr         []NodeAddr
 	AcceptorsReplicas []NodeAddr
 	Bnum              BallotNum
 	Active            bool
@@ -20,7 +21,7 @@ type Leader struct {
 
 type AdoptedMsg struct {
 	B     BallotNum
-	Pvals []Pvalue
+	Pvals map[int]Pvalue
 }
 
 type PreemptedMsg struct {
@@ -32,7 +33,7 @@ func MakeLeader(acceptorsReplicas []NodeAddr, lid NodeAddr) *Leader {
 
 	l.AcceptorsReplicas = append(l.AcceptorsReplicas, acceptorsReplicas...)
 	l.Bnum.Id = 0
-	l.Bnum.Lid = lid
+	l.Bnum.Lid = lid.Id
 	l.Active = false
 	l.Proposals = make(map[int]Command)
 	l.ProposeCh = make(chan ProposeRequest)
@@ -50,9 +51,9 @@ func (p *PaxosNode) run_leader(l *Leader) {
 		case msg := <-l.ProposeCh:
 			if _, ok := l.Proposals[msg.Slot]; !ok {
 				l.Proposals[msg.Slot] = msg.Cmd
-				if active == true {
+				if l.Active == true {
 					cid := StringBallotSlot(l.Bnum, msg.Slot)
-					c := CreateCommander(p.othersAddr, PValue{B: l.Bnum, S: msg.Slot, C: msg.Cmd})
+					c := MakeCommander(p.othersAddr, Pvalue{B: l.Bnum, S: msg.Slot, C: msg.Cmd}, cid, l)
 					l.MuCommanders.Lock()
 					l.Commanders[cid] = c
 					l.MuCommanders.Unlock()
@@ -60,21 +61,26 @@ func (p *PaxosNode) run_leader(l *Leader) {
 				}
 			}
 		case msg := <-l.AdoptCh:
-			//\todo. Update l.proposals
-			for s, v := range l.Proposals {
-				cid := StringBallotSlot(l.Bnum, s)
-				c := CreateCommander(p.othersAddr, PValue{B: l.Bnum, S: s, C: v}, cid)
-				l.MuCommanders.Lock()
-				l.Commanders[cid] = c
-				l.MuCommanders.Unlock()
-				go p.run_commander(c)
+			if CompareBallotNum(msg.B, l.Bnum) == 0 {
+				for slot, pval := range msg.Pvals {
+					l.Proposals[slot] = pval.C
+				}
+				for slot, cmd := range l.Proposals {
+					cmderId := StringBallotSlot(l.Bnum, slot)
+					cmder := MakeCommander(p.othersAddr, Pvalue{B: l.Bnum, S: slot, C: cmd}, cmderId, l)
+					l.MuCommanders.Lock()
+					l.Commanders[cmderId] = cmder
+					l.MuCommanders.Unlock()
+					go p.run_commander(cmder)
+				}
+				l.Active = true
 			}
 		case msg := <-l.PreemptCh:
 			if CompareBallotNum(msg.Bp, l.Bnum) == 1 {
-				active = false
+				l.Active = false
 				l.Bnum.Id = l.Bnum.Id + 1
 				sid := StringBallot(l.Bnum)
-				s := CreateScout(p.othersAddr, l.b, sid)
+				s := MakeScout(p.othersAddr, l.Bnum, sid, l)
 				l.MuScouts.Lock()
 				l.Scouts[sid] = s
 				l.MuScouts.Unlock()

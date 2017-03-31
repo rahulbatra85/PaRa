@@ -8,13 +8,16 @@ type Replica struct {
 	App       *KVApp
 	SlotIn    int
 	SlotOut   int
-	Requests  []Cmd
+	Requests  []Command
 	Proposals map[int]Command
 	Decisions map[int]Command
 	Leaders   []NodeAddr
 
-	ReqCh chan ClientRequest
-	DecCh chan DecisionRequest
+	ReqMsgCh chan ClientRequestMsg
+	DecCh    chan DecisionRequest
+
+	ClientReplyMap      map[string]ClientReply
+	ClientRequestMsgMap map[string]ClientRequestMsg
 }
 
 func MakeReplica(leaders []NodeAddr, app *KVApp) *Replica {
@@ -26,9 +29,11 @@ func MakeReplica(leaders []NodeAddr, app *KVApp) *Replica {
 	r.Decisions = make(map[int]Command)
 	r.Leaders = append(r.Leaders, leaders...)
 
-	r.ReqCh = make(chan ClientRequest)
+	r.ReqMsgCh = make(chan ClientRequestMsg)
 	r.DecCh = make(chan DecisionRequest)
 
+	r.ClientReplyMap = make(map[string]ClientReply)
+	r.ClientRequestMsgMap = make(map[string]ClientRequestMsg)
 	return &r
 }
 
@@ -36,12 +41,12 @@ func (p *PaxosNode) propose(r *Replica) {
 	for len(p.r.Requests) > 0 {
 		if _, ok := p.r.Decisions[p.r.SlotIn]; !ok {
 			cmd := p.r.Requests[0]
-			proposals[p.r.SlotIn] = cmd
-			p.r.requests = p.r.requests[1:len(p.r.Requests)]
+			p.r.Proposals[p.r.SlotIn] = cmd
+			p.r.Requests = p.r.Requests[1:len(p.r.Requests)]
 			//Send propose to all leaders
 			req := ProposeRequest{Slot: p.r.SlotIn, Cmd: cmd}
-			for l := range r.Leaders {
-				go ProposeRPC(l, req)
+			for _, l := range r.Leaders {
+				go p.ProposeRPC(&l, req)
 			}
 		}
 		p.r.SlotIn++
@@ -50,38 +55,57 @@ func (p *PaxosNode) propose(r *Replica) {
 
 func (p *PaxosNode) perform(r *Replica, c Command) {
 	for s := 0; s < p.r.SlotOut; s++ {
-		if val, ok := r.Decisions[s]; ok {
+		if IsSameCmd(r.Decisions[s], c) {
 			r.SlotOut++
 			return
 		}
 	}
-	result := p.app.ApplyOperation(c.Op)
-	r.SlotOut++
 
-	req := ResponseRequest{Cmd: c, Result: result}
-	go ResponseRPC(c.ClientNodeAddr, req)
+	reply := ClientReply{}
+	reply.SeqNum = c.SeqNum
+	reply.Value, reply.Code = p.app.ApplyOperation(c)
+	id := fmt.Sprintf("%v_%v", c.ClientId, c.SeqNum)
+	r.ClientRequestMsgMap[id].reply <- reply
+	delete(r.ClientRequestMsgMap, id)
+	r.ClientReplyMap[id] = reply
+
+	r.SlotOut++
 }
 
 func (p *PaxosNode) run_replica(r *Replica) {
 	for {
 		select {
-		case msg := <-r.ReqCh:
-			r.Requests = append(r.Requests, msg.c)
+		//Request From Client
+		case msg := <-r.ReqMsgCh:
+			//Check if this is a duplicate command
+			id := fmt.Sprintf("%v_%v", msg.args.Cmd.ClientId, msg.args.Cmd.SeqNum)
+			if reply, ok := r.ClientReplyMap[id]; ok {
+				if reply.SeqNum == msg.args.Cmd.SeqNum {
+					msg.reply <- reply
+				}
+			} else {
+				r.Requests = append(r.Requests, msg.args.Cmd)
+				r.ClientRequestMsgMap[id] = msg
+			}
 
+		//Decision
 		case msg := <-r.DecCh:
-			r.Decisions[msg.s] = msg.c
+			r.Decisions[msg.Slot] = msg.Cmd
 			cmdDecision, cmdInDecisions := r.Decisions[r.SlotOut]
-			for cmdInDecision == true {
-				if cmdProposal, cmdInProposals := r.Proposals[r.SlotOut]; cmdInProp {
+			for cmdInDecisions == true {
+				//Update Proposals
+				if cmdProposal, cmdInProposals := r.Proposals[r.SlotOut]; cmdInProposals {
 					delete(r.Proposals, r.SlotOut)
-					if cmdProposal.Cid != cmdDecision.Cid || cmdProposal.SeqNum != cmdDecision.SeqNum || cmdProposal.Operation.Name != cmdDecision.Operation.Name {
-						r.Requests = append(r.Requests, cmdDecision)
+					if IsSameCmd(cmdProposal, cmdDecision) != true {
+						r.Requests = append(r.Requests, cmdProposal)
 					}
 				}
 
-				p.Perform(r)
-			}
+				p.perform(r, cmdDecision)
+				cmdDecision, cmdInDecisions = r.Decisions[r.SlotOut]
+			} //end for
 
-		}
-	}
+		} //end select
+		p.propose(r)
+	} //end for
 }

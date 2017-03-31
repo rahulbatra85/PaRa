@@ -33,10 +33,6 @@ func (p *PaxosNode) StartHdl(request *StartRequest) error {
 		p.INF("OtherNode[%d]=[%v] %v", i, node.Id, node.Addr)
 	}
 
-	if p.nodeMgrAddr.Id != "" && p.nodeMgrAddr.Addr != "" {
-		ReadyNotificationRPC(&p.nodeMgrAddr, &p.localAddr)
-	}
-
 	//Start Server
 	go p.run()
 
@@ -45,24 +41,24 @@ func (p *PaxosNode) StartHdl(request *StartRequest) error {
 
 func (p *PaxosNode) ProposeHdl(request *ProposeRequest) error {
 	//forward to leader
-	p.l.ProposeCh <- request
+	p.l.ProposeCh <- *request
 	return nil
 }
 func (p *PaxosNode) DecisionHdl(request *DecisionRequest) error {
 	//forward to replica
-	p.r.DecCh <- request
+	p.r.DecCh <- *request
 	return nil
 }
 
 func (p *PaxosNode) P1aHdl(request *P1aRequest) error {
 	//forward to acceptor
-	p.a.P1aCh < request
+	p.a.P1aCh <- *request
 	return nil
 }
 
 func (p *PaxosNode) P2aHdl(request *P2aRequest) error {
 	//forward to acceptor
-	p.a.P2aCh <- request
+	p.a.P2aCh <- *request
 	return nil
 }
 
@@ -70,10 +66,12 @@ func (p *PaxosNode) P1bHdl(request *P1bRequest) error {
 	//forward to scout
 	//See if Scout is still active.Otherwise, ignore
 	p.l.MuScouts.RLock()
-	if s, ok := p.l.Scouts[request.Scout]; ok {
-		s.P1bCh <- request
+	if s, ok := p.l.Scouts[request.ScoutId]; ok {
+		s.P1bCh <- *request
 	}
 	p.l.MuScouts.Unlock()
+
+	return nil
 }
 
 func (p *PaxosNode) P2bHdl(request *P2bRequest) error {
@@ -81,17 +79,20 @@ func (p *PaxosNode) P2bHdl(request *P2bRequest) error {
 	//See if Commander is still active. Otherwise, ignore
 	p.l.MuCommanders.RLock()
 	if c, ok := p.l.Commanders[request.CommanderId]; ok {
-		c.P2bCh <- request
+		c.P2bCh <- *request
 	}
 	p.l.MuScouts.Unlock()
-}
 
-func (p *PaxosNode) ClientRegisterHdl(request *ClientRegisterArgs) error {
-	p.r.ReqCh <- request
 	return nil
 }
 
-func (p *PaxosNode) ClientRequestHdl(request *ClientRequestArgs) error {
-	p.r.ReqCh <- request
-	return nil
+type ClientRequestMsg struct {
+	args  *ClientRequestArgs
+	reply chan ClientReply
+}
+
+func (p *PaxosNode) ClientRequestHdl(request *ClientRequestArgs) (ClientReply, error) {
+	replyCh := make(chan ClientReply)
+	p.r.ReqMsgCh <- ClientRequestMsg{request, replyCh}
+	return <-replyCh, nil
 }

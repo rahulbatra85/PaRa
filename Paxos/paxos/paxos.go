@@ -1,9 +1,7 @@
 package paxos
 
 import (
-	"crypto/sha1"
 	"fmt"
-	"math/big"
 	"net"
 	"net/rpc"
 	"sync"

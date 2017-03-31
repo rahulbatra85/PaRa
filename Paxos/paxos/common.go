@@ -2,6 +2,7 @@ package paxos
 
 import (
 	"crypto/sha1"
+	"fmt"
 	"math/big"
 )
 
@@ -10,8 +11,8 @@ type ClientReplyCode int
 const (
 	ClientReplyCode_REQUEST_FAILED ClientReplyCode = iota
 	ClientReplyCode_REQUEST_SUCCESSFUL
-	ClientReplyCode_RETRY
-	ClientReplyCode_NOT_LEADER
+	ClientReplyCode_INVALID_KEY
+	ClientReplyCode_INVALID_COMMAND
 )
 
 type OpType int
@@ -39,12 +40,21 @@ type Operation struct {
 	Value string
 }
 
+func IsSameCmd(c1 Command, c2 Command) bool {
+	if c1.ClientId == c2.ClientId && c1.SeqNum == c2.SeqNum {
+		return true
+	} else {
+		return false
+	}
+}
+
 //Ballot Numbers are lexicographically ordered
 //pair of an integer and leader id. Leader id
 //must be totally ordered
+//Note: NULL Ballot Number-(Id:0,Lid:"")
 type BallotNum struct {
-	Id  int //Ballot Num Id
-	Lid int //Leader Id
+	Id  int    //Ballot Num Id
+	Lid string //Leader Id
 }
 
 //Proposal Value is a triple consisting of BallotNum,slot number, and command
@@ -53,43 +63,6 @@ type Pvalue struct {
 	S int
 	C Command
 }
-
-/*
-//Messages rcvd by Replica
-type RequestMsg struct {
-	C Command
-}
-
-type DecisionMsg struct {
-	S int
-	C Command
-}
-
-//Messages rcvd by Acceptor
-type P1aMsg struct {
-	Lid NodeAddr
-	B   BallotNum
-}
-
-type P2aMsg struct {
-	Lid  NodeAddr
-	Pval Pvalue
-}
-
-//Message rcvd by Scout
-type P1bMsg struct {
-	Aid NodeAddr
-	B   BallotNum
-	R   Pvalue
-}
-
-//Message rcvd by Commander
-type P2bMsg struct {
-	Aid NodeAddr
-	B   BallotNum
-}
-
-*/
 
 //Compares BallotNum.
 //Returns -1 if b1 < b2, 0 if b1 == b2, or 1 if b1 > b2
@@ -110,12 +83,13 @@ func CompareBallotNum(b1 BallotNum, b2 BallotNum) int {
 }
 
 func StringBallot(b BallotNum) string {
-	s = fmt.Sprintf("%v_%v", b.Id, b.Lid)
+	s := fmt.Sprintf("%v_%v", b.Id, b.Lid)
 	return s
 }
 
-func StringBallotSlot(b BallotNum, s int) string {
-	s = fmt.Sprintf("%v_%v_%v", b.Id, b.Lid, s)
+func StringBallotSlot(b BallotNum, slot int) string {
+	s := fmt.Sprintf("%v_%v_%v", b.Id, b.Lid, slot)
+	return s
 }
 
 func HashAddr(addr string, length int) string {

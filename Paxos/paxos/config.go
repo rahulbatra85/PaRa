@@ -5,20 +5,22 @@ type PaxosConfig struct {
 	ClusterSize int
 }
 
-func CreatePaxosConfig() *PaxosConfig {
+func MakePaxosConfig() *PaxosConfig {
 	c := new(PaxosConfig)
 	c.NodeIdSize = 2
 	c.ClusterSize = 3
 	return c
 }
 
-type NodeManagerConfig struct {
+type PaxosClientKVConfig struct {
 	ClusterSize int
+	NodeIdSize  int
 }
 
-func CreateNodeManagerConfig() *NodeManagerConfig {
-	c := new(NodeManagerConfig)
+func MakePaxosClientKVConfig() *PaxosClientKVConfig {
+	c := new(PaxosClientKVConfig)
 	c.ClusterSize = 3
+	c.NodeIdSize = 2
 
 	return c
 }
