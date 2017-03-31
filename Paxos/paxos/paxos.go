@@ -17,6 +17,7 @@ type PaxosNode struct {
 	othersAddr []NodeAddr      //OtherAddrs
 	config     *PaxosConfig    //Config
 	RPCServer  *PaxosRPCServer //Pointer to RPC server
+	conns      map[NodeAddr]*connection
 
 	//Replica, Leader, and Acceptor
 	r *Replica
@@ -40,6 +41,7 @@ func MakePaxos(port int, remoteNodeAddr *NodeAddr, config *PaxosConfig) (pp *Pax
 
 	//Set up logging
 	InitTracers()
+	SetDebugTrace(true)
 
 	//Create listener
 	conn, err := CreateListener(port)
@@ -58,6 +60,8 @@ func MakePaxos(port int, remoteNodeAddr *NodeAddr, config *PaxosConfig) (pp *Pax
 	rpc.RegisterName(p.localAddr.Addr, p.RPCServer)
 	p.DBG("Registered RPC\n")
 	go p.RPCServer.startPaxosRPCServer()
+
+	p.conns = make(map[NodeAddr]*connection)
 
 	//Either Send JoinRPC to main node or wait to receive JoinRPC from all nodes
 	if remoteNodeAddr != nil {
@@ -83,6 +87,11 @@ func (p *PaxosNode) startNodes() {
 			fmt.Printf("(%v) Starting node-%v\n", p.Id, otherNode.Id)
 			StartRPC(&otherNode, p.othersAddr)
 		}
+	}
+
+	for i, node := range p.othersAddr {
+		p.INF("OtherNode[%d]=[%v] %v", i, node.Id, node.Addr)
+		p.conns[node] = MakeConnection(&node)
 	}
 
 	go p.run()

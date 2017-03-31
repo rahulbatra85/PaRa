@@ -2,6 +2,7 @@ package paxos
 
 import (
 	"sync"
+	"time"
 )
 
 type Leader struct {
@@ -46,22 +47,40 @@ func MakeLeader(acceptorsReplicas []NodeAddr, lid NodeAddr) *Leader {
 }
 
 func (p *PaxosNode) run_leader(l *Leader) {
+	p.INF("Leader Started")
+
+	//Start First Scout
+	time.Sleep(100 * time.Millisecond)
+
+	sid := StringBallot(l.Bnum)
+	s := MakeScout(p.othersAddr, l.Bnum, sid, l)
+	l.MuScouts.Lock()
+	l.Scouts[sid] = s
+	l.MuScouts.Unlock()
+	go p.run_scout(s)
+
 	for {
 		select {
 		case msg := <-l.ProposeCh:
+			p.DBG("LEADER:  Propose=%d,%v", msg.Slot, msg.Cmd)
 			if _, ok := l.Proposals[msg.Slot]; !ok {
 				l.Proposals[msg.Slot] = msg.Cmd
+				p.INF("LEADER:  Proposal Added")
 				if l.Active == true {
+					p.INF("LEADER:  Starting Cmder for Proposal")
 					cid := StringBallotSlot(l.Bnum, msg.Slot)
 					c := MakeCommander(p.othersAddr, Pvalue{B: l.Bnum, S: msg.Slot, C: msg.Cmd}, cid, l)
 					l.MuCommanders.Lock()
 					l.Commanders[cid] = c
 					l.MuCommanders.Unlock()
+
 					go p.run_commander(c)
 				}
 			}
 		case msg := <-l.AdoptCh:
+			p.DBG("LEADER:  AdoptMsg=%v,%v", msg.B, msg.Pvals)
 			if CompareBallotNum(msg.B, l.Bnum) == 0 {
+				p.DBG("LEADER:  Ballot Matches. Updating Proposals and Starting Cmders")
 				for slot, pval := range msg.Pvals {
 					l.Proposals[slot] = pval.C
 				}
@@ -76,7 +95,9 @@ func (p *PaxosNode) run_leader(l *Leader) {
 				l.Active = true
 			}
 		case msg := <-l.PreemptCh:
+			p.DBG("LEADER:  PremptMsg=%v", msg.Bp)
 			if CompareBallotNum(msg.Bp, l.Bnum) == 1 {
+				p.DBG("LEADER:  Ballot Bigger. Starting new scout")
 				l.Active = false
 				l.Bnum.Id = l.Bnum.Id + 1
 				sid := StringBallot(l.Bnum)

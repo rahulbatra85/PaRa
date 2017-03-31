@@ -19,16 +19,21 @@ func MakeAcceptor() *Acceptor {
 }
 
 func (p *PaxosNode) run_acceptor(a *Acceptor) {
+	p.INF("Acceptor Started")
 	for {
 		select {
 		case msg := <-a.P1aCh:
+			p.DBG("ACC: P1aMsg=%v", msg)
 			if CompareBallotNum(msg.Bnum, a.Bnum) == 1 {
 				a.Bnum = msg.Bnum
+				p.DBG("ACC: Updated Bnum=%v", a.Bnum)
 			}
 			//Send RPC to scout
 			req := P1bRequest{ScoutId: msg.ScoutId, Acceptor: p.localAddr, Bnum: a.Bnum, Rval: a.Accepted}
 			go p.P1bRPC(&msg.Leader, req)
+
 		case msg := <-a.P2aCh:
+			p.DBG("ACC: P2aMsg=%v", msg)
 			if CompareBallotNum(msg.Pval.B, a.Bnum) >= 0 {
 				a.Bnum = msg.Pval.B
 			}

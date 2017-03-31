@@ -40,15 +40,19 @@ func (s *PaxosRPCServer) StartWrapper(req *StartRequest, reply *StartReply) erro
 
 //Propose Wrapper
 func (s *PaxosRPCServer) ProposeWrapper(req *ProposeRequest, reply *ProposeReply) error {
+	s.node.DBG("ProposeWrapper Enter")
 	err := s.node.ProposeHdl(req)
 	reply.Success = err == nil
+	s.node.DBG("ProposeWrapper Exit")
 	return err
 }
 
 //Decision Wrapper
 func (s *PaxosRPCServer) DecisionWrapper(req *DecisionRequest, reply *DecisionReply) error {
+	s.node.DBG("Decision Wrapper Enter")
 	err := s.node.DecisionHdl(req)
 	reply.Success = err == nil
+	s.node.DBG("Decision Wrapper Exit")
 	return err
 }
 

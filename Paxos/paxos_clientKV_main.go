@@ -42,8 +42,19 @@ func main() {
 		}
 		kvc := paxos.MakePaxosClientKV(config, cid, nodes)
 
+		kvc.INF("Created Paxos Client KV")
+		kvc.INF("Replicas ")
+		for i, n := range nodes {
+			kvc.INF("Replica[%d]: Id=%s, Addr=%s\n", i, n.Id, n.Addr)
+		}
+
 		//Process user cmds
 		done := false
+
+		kvc.INF("\nReady for Commands")
+		kvc.INF("Valid Commands")
+		kvc.INF("\tGET <key>")
+		kvc.INF("\tPUT <key> <val>\n")
 		for !done {
 			scanner := bufio.NewScanner(os.Stdin)
 			for scanner.Scan() {
@@ -68,7 +79,7 @@ func main() {
 					//PUT
 				} else if tokens[0] == "PUT" || tokens[0] == "put" {
 					if len(tokens) != 3 {
-						fmt.Fprintf(os.Stderr, "Invalid Syntax %s. Expected GET/get <key>\n", input)
+						fmt.Fprintf(os.Stderr, "Invalid Syntax %s. Expected PUT/put <key> <value>\n", input)
 					} else {
 						err := kvc.SendPUTRequest(tokens[1], tokens[2])
 						if err == nil {

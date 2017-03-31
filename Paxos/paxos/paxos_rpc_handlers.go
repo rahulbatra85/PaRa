@@ -31,6 +31,7 @@ func (p *PaxosNode) StartHdl(request *StartRequest) error {
 		p.othersAddr[i].Id = node.Id
 		p.othersAddr[i].Addr = node.Addr
 		p.INF("OtherNode[%d]=[%v] %v", i, node.Id, node.Addr)
+		p.conns[node] = MakeConnection(&node)
 	}
 
 	//Start Server
@@ -69,7 +70,7 @@ func (p *PaxosNode) P1bHdl(request *P1bRequest) error {
 	if s, ok := p.l.Scouts[request.ScoutId]; ok {
 		s.P1bCh <- *request
 	}
-	p.l.MuScouts.Unlock()
+	p.l.MuScouts.RUnlock()
 
 	return nil
 }
@@ -81,7 +82,7 @@ func (p *PaxosNode) P2bHdl(request *P2bRequest) error {
 	if c, ok := p.l.Commanders[request.CommanderId]; ok {
 		c.P2bCh <- *request
 	}
-	p.l.MuScouts.Unlock()
+	p.l.MuCommanders.RUnlock()
 
 	return nil
 }

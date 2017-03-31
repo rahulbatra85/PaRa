@@ -11,10 +11,10 @@ func (p *PaxosNode) run() {
 	p.a = MakeAcceptor()
 
 	//Start Replica
-	p.run_replica(p.r)
+	go p.run_replica(p.r)
 	//Start Leader
-	p.run_leader(p.l)
+	go p.run_leader(p.l)
 	//Start Acceptor
-	p.run_acceptor(p.a)
+	go p.run_acceptor(p.a)
 	p.INF("PaxosServer Run Exit")
 }

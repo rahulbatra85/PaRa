@@ -17,6 +17,7 @@ func MakeScout(acceptors []NodeAddr, b BallotNum, id string, l *Leader) *Scout {
 	s.Acceptors = append(s.Acceptors, acceptors...)
 	s.Bnum = b
 
+	s.WaitFor = make(map[NodeAddr]bool)
 	for _, a := range acceptors {
 		s.WaitFor[a] = true
 	}
@@ -29,19 +30,26 @@ func MakeScout(acceptors []NodeAddr, b BallotNum, id string, l *Leader) *Scout {
 }
 
 func (p *PaxosNode) run_scout(s *Scout) {
-	p.DBG("run_scout Enter")
+	p.INF("SCOUT[%s]: Started", s.Id)
 	//send to all acceptors
 	req := P1aRequest{ScoutId: s.Id, Leader: p.localAddr, Bnum: s.Bnum}
 	for _, n := range s.Acceptors {
-		p.P1aRPC(&n, req)
+		if n != p.localAddr {
+			go p.P1aRPC(&n, req)
+		}
 	}
+	go func() {
+		p.a.P1aCh <- req
+	}()
 
 	spvals := make(map[int]Pvalue)
 	done := false
 	for !done {
 		select {
 		case msg := <-s.P1bCh:
+			p.DBG("SCOUT[%s]: P1bMsg=%v", s.Id, msg)
 			if msg.Bnum == s.Bnum {
+				p.INF("SCOUT[%s]: BallotMatched", s.Id)
 				for slot, pval := range msg.Rval {
 					sPval, ok := spvals[slot]
 					if !ok {
@@ -53,13 +61,15 @@ func (p *PaxosNode) run_scout(s *Scout) {
 					}
 				}
 				delete(s.WaitFor, msg.Acceptor)
-				if len(s.WaitFor) < (len(s.Acceptors) / 2) {
+				if len(s.WaitFor) < ((len(s.Acceptors) + 1) / 2) {
+					p.DBG("SCOUT[%s]: Adopted Bnum=%v", s.Id, s.Bnum)
 					m := AdoptedMsg{B: s.Bnum, Pvals: spvals}
 					s.L.AdoptCh <- m
 					done = true
 				}
 			} else {
-				m := PreemptedMsg{Bp: s.Bnum}
+				p.DBG("SCOUT[%s]: Prempted", s.Id)
+				m := PreemptedMsg{Bp: msg.Bnum}
 				s.L.PreemptCh <- m
 				done = true
 			}
@@ -71,5 +81,5 @@ func (p *PaxosNode) run_scout(s *Scout) {
 	delete(s.L.Scouts, s.Id)
 	s.L.MuScouts.Unlock()
 
-	p.DBG("run_scout Exit")
+	p.DBG("SCOUT[%s]: Exit", s.Id)
 }
