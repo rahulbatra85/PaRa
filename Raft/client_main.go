@@ -47,10 +47,10 @@ func main() {
 	if rc == nil {
 		fmt.Fprintf(os.Stderr, "Client Create Failed. Exiting")
 	} else {
-		fmt.Printf("Ready for input commands\n")
 		inbuf := bufio.NewReader(os.Stdin)
 		for {
 			//parse command
+			fmt.Printf("\nReady for input commands\n")
 			input, err := inbuf.ReadString('\n')
 			if err == io.EOF {
 				continue
@@ -74,7 +74,7 @@ func main() {
 					if err == nil {
 						fmt.Printf("%s was successful. value=%s \n", input, result)
 					} else {
-						fmt.Fprintf(os.Stderr, "%v\n", err)
+						fmt.Fprintf(os.Stderr, "% failed. %v\n", input, err)
 					}
 				}
 			} else if tokens[0] == "PUT" || tokens[0] == "put" {
@@ -85,9 +85,11 @@ func main() {
 					if err == nil {
 						fmt.Printf("%s was successful \n", input)
 					} else {
-						fmt.Fprintf(os.Stderr, "%v\n", err)
+						fmt.Fprintf(os.Stderr, "%s failed %v\n", input, err)
 					}
 				}
+			} else {
+				fmt.Fprintf(os.Stderr, "Invalid Command%s. Cmd must be GET/PUT/EXIT\n")
 			}
 		}
 	}

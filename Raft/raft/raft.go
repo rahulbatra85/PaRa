@@ -32,6 +32,7 @@ type RaftNode struct {
 	//RPCServer *RaftRPCServer
 	RPCWrapper *RaftRPCWrapper
 	//GRPCServer *grpc.Server
+	conns map[NodeAddr]*connection
 
 	// Raft paper's Figure 2 description of state
 	state     RaftState
@@ -89,6 +90,7 @@ func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config 
 	r.clientAppliedMap = make(map[int32]ClientReply)
 	r.clientRequestMap = make(map[int32]ClientRequestMsg)
 	r.clientRegisterMap = make(map[int32]ClientRegisterMsg)
+	r.conns = make(map[NodeAddr]*connection)
 
 	//Init channels
 	r.appendEntriesMsgCh = make(chan AppendEntriesMsg)
@@ -110,8 +112,8 @@ func MakeRaft(port int, remoteNodeAddr *NodeAddr, nodeMgrAddr *NodeAddr, config 
 	//SetDebugTrace(true)
 
 	//Create listener
-	conn, err := CreateUnixListener(port)
-	//conn, err := CreateListener(port)
+	//conn, err := CreateUnixListener(port)
+	conn, err := CreateListener(port)
 	if err != nil {
 		fmt.Printf("Error Creating Listener =%v\n", err)
 		return
@@ -191,7 +193,10 @@ func (r *RaftNode) startNodes() {
 			StartRPC(otherNode, r.othersAddr)
 		}
 	}
-
+	for i, node := range r.othersAddr {
+		r.INF("OtherNode[%d]=[%v] %v", i, node.Id, node.Addr)
+		r.conns[*node] = MakeConnection(node)
+	}
 	/*	if r.nodeMgrAddr.Id != "" && r.nodeMgrAddr.Addr != "" {
 		ReadyNotificationRPC(&r.nodeMgrAddr, &r.localAddr)
 	}*/

@@ -11,6 +11,7 @@ type RaftClient struct {
 	Leader   NodeAddr
 	Nodes    []NodeAddr
 	SeqNum   uint64
+	Conns    map[NodeAddr]*connection
 }
 
 func MakeRaftClient(nodes []NodeAddr, config *RaftClientConfig, clientID int32) *RaftClient {
@@ -22,24 +23,29 @@ func MakeRaftClient(nodes []NodeAddr, config *RaftClientConfig, clientID int32) 
 	//Register Client
 	request := ClientRegisterArgs{}
 	ClientInitTracers()
+	rc.Conns = make(map[NodeAddr]*connection)
+	for _, node := range rc.Nodes {
+		rc.Conns[node] = MakeConnection(&node)
+	}
 
 	if clientID > 0 {
 		rc.ClientId = clientID
 		return &rc
 	} else {
-		rc.INF("Raft Client Trying to register with %v", rc.Leader)
+		fmt.Printf("Raft Client Created")
 		tryCnt := 0
 		done := false
 		leaderIdx := 0
 		for !done && tryCnt < 50 {
-			rc.INF("Raft Client Created. Trying to register with %v, cnt=%d", rc.Leader, tryCnt)
-			reply, err := ClientRegisterRPC(&rc.Leader, request)
+			fmt.Printf("\tTrying to register with %v, cnt=%d\n", rc.Leader, tryCnt)
+			reply, err := rc.ClientRegisterRPC(&rc.Leader, request)
 			if err != nil {
-				rc.INF("Registration Request Error. %v", err)
+				fmt.Printf("\tRESP: Error sending RPC to %v. %v\n", rc.Leader, err)
 				if leaderIdx < len(rc.Nodes) {
 					leaderIdx++
 					rc.Leader = rc.Nodes[leaderIdx]
 				} else {
+					fmt.Printf("\tRESP: Tried all nodes in the cluster. Giving up...\n")
 					return nil
 				}
 			} else {
@@ -48,19 +54,20 @@ func MakeRaftClient(nodes []NodeAddr, config *RaftClientConfig, clientID int32) 
 					done = true
 					rc.Leader = *(reply.LeaderNode)
 					rc.ClientId = reply.ClientId
-					rc.INF("Registration Successful. Client_ID=%d", rc.ClientId)
+					fmt.Printf("\tRESP:Registration Successful. Client_ID=%d\n", rc.ClientId)
 					return &rc
 				} else if reply.Code == ClientReplyCode_NOT_LEADER {
-					rc.INF("Registration NOT_LEADER")
+					fmt.Printf("\tRESP:Contacted NOT_LEADER.\n")
 					leaderIdx = 0
 					if reply.LeaderNode != nil {
 						rc.Leader = *(reply.LeaderNode)
 					}
 				} else if reply.Code == ClientReplyCode_RETRY {
-					rc.INF("Registration RETRY")
+					leaderIdx = 0
+					fmt.Printf("\tRESP:RegistrationRETRY\n")
 					time.Sleep(time.Millisecond * 500)
 				} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
-					rc.INF("Registration REQUEST_FAILED")
+					fmt.Printf("RESP:Registration REQUEST_FAILED\n")
 					done = true
 					return nil
 				}
@@ -77,38 +84,44 @@ func (rc *RaftClient) SendClientGetRequest(key string) (string, error) {
 	cmd := Command{ClientId: rc.ClientId, SeqNum: rc.SeqNum, Op: &opr}
 	request := ClientRequestArgs{Cmd: &cmd}
 
+	fmt.Printf("Sending GET Request\n")
 	tryCnt := 0
 	leaderIdx := 0
 	rc.SeqNum++
 	for {
-		reply, err := ClientRequestRPC(&rc.Leader, request)
+		fmt.Printf("\n\tTrying GET Request to %v\n", rc.Leader)
+		reply, err := rc.ClientRequestRPC(&rc.Leader, request)
 		if err != nil {
-			if leaderIdx < len(rc.Nodes) {
-				leaderIdx++
+			fmt.Printf("\tRESP: Error sending RPC to %v. %v\n", rc.Leader, err)
+			/*if leaderIdx < len(rc.Nodes) {
 				rc.Leader = rc.Nodes[leaderIdx]
 			} else {
-				return "", err
-			}
+				return "", fmt.Errorf("Tried all nodes in the cluster")
+			}*/
+			leaderIdx = (leaderIdx + 1) % len(rc.Nodes)
+			rc.Leader = rc.Nodes[leaderIdx]
 		} else {
 			if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
-				//rc.INF("Request SUCCESSFUL")
+				//fmt.Printf("\tRESP:Request Successful.")
 				return reply.Value, nil
 			} else if reply.Code == ClientReplyCode_RETRY {
-				rc.INF("Request RETRY")
+				fmt.Printf("\tRESP:Told to RETRY\n")
 				time.Sleep(time.Millisecond * 500)
 				tryCnt++
 				if tryCnt > 5 {
 					return "", fmt.Errorf("Retry limit hit")
 				}
 			} else if reply.Code == ClientReplyCode_NOT_LEADER {
-				rc.INF("Request NOT_LEADER")
+				fmt.Printf("\tRESP:Contacted NOT_LEADER.")
 				leaderIdx = 0
 				if reply.LeaderNode != nil {
 					rc.Leader = *(reply.LeaderNode)
 				}
 			} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
-				rc.INF("Request REQUEST_FAILED")
+				//fmt.Printf("RESP: Request Failed")
 				return "", fmt.Errorf("Request Failed")
+			} else if reply.Code == ClientReplyCode_INVALID_KEY {
+				return "", fmt.Errorf("INVALID_KEY")
 			}
 		}
 	}
@@ -122,34 +135,39 @@ func (rc *RaftClient) SendClientPutRequest(key string, value string) error {
 	tryCnt := 0
 	leaderIdx := 0
 	rc.SeqNum++
+	fmt.Printf("Sending PUT Request\n")
 	for {
-		reply, err := ClientRequestRPC(&rc.Leader, request)
+		fmt.Printf("\n\tTrying PUT Request to %v\n", rc.Leader)
+		reply, err := rc.ClientRequestRPC(&rc.Leader, request)
 		if err != nil {
-			if leaderIdx < len(rc.Nodes) {
+			fmt.Printf("\tRESP: Error sending RPC to %v. %v\n", rc.Leader, err)
+			/*if leaderIdx < len(rc.Nodes) {
 				leaderIdx++
 				rc.Leader = rc.Nodes[leaderIdx]
 			} else {
 				return err
-			}
+			}*/
+			leaderIdx = (leaderIdx + 1) % len(rc.Nodes)
+			rc.Leader = rc.Nodes[leaderIdx]
 		} else {
 			if reply.Code == ClientReplyCode_REQUEST_SUCCESSFUL {
-				//rc.INF("Request SUCCESSFUL")
+				//fmt.Printf("Request SUCCESSFUL")
 				return nil
 			} else if reply.Code == ClientReplyCode_RETRY {
-				rc.INF("Request RETRY")
+				fmt.Printf("Request RETRY")
 				time.Sleep(time.Millisecond * 500)
 				tryCnt++
 				if tryCnt > 5 {
 					return fmt.Errorf("Retry limit hit")
 				}
 			} else if reply.Code == ClientReplyCode_NOT_LEADER {
-				rc.INF("Request NOT_LEADER")
+				fmt.Printf("Request NOT_LEADER\n")
 				leaderIdx = 0
 				if reply.LeaderNode != nil {
 					rc.Leader = *(reply.LeaderNode)
 				}
 			} else if reply.Code == ClientReplyCode_REQUEST_FAILED {
-				rc.INF("Request REQUEST_FAILED")
+				fmt.Printf("Request REQUEST_FAILED\n")
 				return fmt.Errorf("Request Failed")
 			}
 		}

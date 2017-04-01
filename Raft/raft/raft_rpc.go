@@ -5,33 +5,49 @@ import (
 
 	//	"golang.org/x/net/context"
 	//	"google.golang.org/grpc"
-	//"net"
+	"net"
 	"net/rpc"
 	"os"
+	"sync"
 	"time"
 )
 
-const (
-	RPCTimeout = 1500
-)
+/*const (
+	RPCTimeout       = 2000
+	ClientRPCTimeout = 10000
+	DialTimeout      = 100
+)*/
 
 //RPC client connection map
 //var rClientsMap = make(map[string]*rClient)
 var replicaConn = make(map[string]*rpc.Client)
 var replicaConnRetry = make(map[string]int)
 
-/*type rClient struct {
-	rpcClient RaftRPCClient
-	conn      *grpc.ClientConn
-	cnt       int
-}*/
+type connection struct {
+	rpcClient  *rpc.Client
+	conn       net.Conn
+	mu         sync.Mutex
+	connClosed bool
+}
+
+func MakeConnection(remoteAddr *NodeAddr) *connection {
+	c := new(connection)
+	var err error
+	c.conn, err = net.DialTimeout("tcp4", remoteAddr.Addr, time.Duration(DialTimeout)*time.Millisecond)
+	if err != nil {
+		return nil
+	}
+	c.rpcClient = rpc.NewClient(c.conn)
+	c.connClosed = false
+	return c
+}
 
 //JoinRPC
 func JoinRPC(remoteNode *NodeAddr, fromNode *NodeAddr) error {
 	fmt.Printf("Join RPC Enter")
 	req := JoinRequest{RemoteNode: remoteNode, FromNode: fromNode}
 	reply := new(JoinReply)
-	err := makeRemoteCall(remoteNode, "JoinRPC", &req, &reply, 600)
+	err := doDialCloseRemoteCall(remoteNode, "JoinRPC", &req, &reply)
 	if err != nil {
 		return err
 	}
@@ -54,7 +70,7 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []*NodeAddr) error {
 	}
 	req.OtherNodes = nodes
 	reply := new(StartReply)
-	err := makeRemoteCall(remoteNode, "StartRPC", &req, &reply, 600)
+	err := doDialCloseRemoteCall(remoteNode, "StartRPC", &req, &reply)
 	if err != nil {
 		return err
 	}
@@ -68,13 +84,13 @@ func StartRPC(remoteNode *NodeAddr, otherNodes []*NodeAddr) error {
 
 // RequestVote RPC
 //func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
-func RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs) (*RequestVoteReply, error) {
+func (r *RaftNode) RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs) (*RequestVoteReply, error) {
 	/*	if r.netConfig.GetNetworkConfig(r.localAddr, *remoteNode) == false {
 		r.INF("ReqVOTE send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
 	}*/
 	reply := new(RequestVoteReply)
-	err := makeRemoteCall(remoteNode, "RequestVoteRPC", &req, &reply, 600)
+	err := r.doRemoteCall(remoteNode, "RequestVoteRPC", &req, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
 	} else {
@@ -84,14 +100,14 @@ func RequestVoteRPC(remoteNode *NodeAddr, req RequestVoteArgs) (*RequestVoteRepl
 
 // Append Entries RPC
 //func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
-func AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
+func (r *RaftNode) AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntriesReply, error) {
 	/*r.INF("AppendEntriesRPC Enter")
 	if r.netConfig.GetNetworkConfig(r.localAddr, *remoteNode) == false {
 		r.INF("AppEntries send NOT allowed")
 		return nil, fmt.Errorf("Not allowed")
 	}*/
 	reply := new(AppendEntriesReply)
-	err := makeRemoteCall(remoteNode, "AppendEntriesRPC", &req, &reply, 600)
+	err := r.doRemoteCall(remoteNode, "AppendEntriesRPC", &req, &reply, RPCTimeout)
 	if err != nil {
 		return nil, err
 	} else {
@@ -104,9 +120,9 @@ func AppendEntriesRPC(remoteNode *NodeAddr, req AppendEntriesArgs) (*AppendEntri
 /////////////////////////////////////////
 
 //Register Client
-func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*ClientRegisterReply, error) {
+func (rc *RaftClient) ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*ClientRegisterReply, error) {
 	reply := new(ClientRegisterReply)
-	err := makeRemoteCall(remoteNode, "ClientRegisterRequestRPC", &request, &reply, 2000)
+	err := rc.doRemoteCall(remoteNode, "ClientRegisterRequestRPC", &request, &reply, ClientRPCTimeout)
 	if err != nil {
 		return nil, err
 	} else {
@@ -115,9 +131,9 @@ func ClientRegisterRPC(remoteNode *NodeAddr, request ClientRegisterArgs) (*Clien
 }
 
 //Request
-func ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientReply, error) {
+func (rc *RaftClient) ClientRequestRPC(remoteNode *NodeAddr, request ClientRequestArgs) (*ClientReply, error) {
 	reply := new(ClientReply)
-	err := makeRemoteCall(remoteNode, "ClientRequestRPC", &request, &reply, 2000)
+	err := rc.doRemoteCall(remoteNode, "ClientRequestRPC", &request, &reply, ClientRPCTimeout)
 	if err != nil {
 		return nil, err
 	} else {
@@ -170,6 +186,73 @@ func SetNodetoNodeRPC(remoteNode *NodeAddr, n NodeAddr, val bool) error {
 	err := makeRemoteCall(remoteNode, "SetNodetoNodeRPC", &request, &reply, 600)
 	return err
 }
+func (rc *RaftClient) doRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}, timeout int) error {
+	c := rc.Conns[*remoteAddr]
+	//Only one RPC per outgoing connection
+	//c.mu.Lock()
+	//defer c.mu.Unlock()
+	var err error
+	if c.connClosed {
+		c.conn, err = net.DialTimeout("tcp4", remoteAddr.Addr, time.Duration(DialTimeout)*time.Millisecond)
+		if err != nil {
+			return err
+		}
+		c.rpcClient = rpc.NewClient(c.conn)
+		c.connClosed = false
+	}
+
+	fullProcName := fmt.Sprintf("%v.%v", remoteAddr.Addr, procName)
+	c.conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Millisecond))
+	err = c.rpcClient.Call(fullProcName, request, reply)
+	if err != nil {
+		c.rpcClient.Close()
+		c.connClosed = true
+		return err
+	}
+
+	return nil
+}
+
+func (r *RaftNode) doRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}, timeout int) error {
+	c := r.conns[*remoteAddr]
+	//Only one RPC per outgoing connection
+	//c.mu.Lock()
+	//defer c.mu.Unlock()
+	var err error
+	if c.connClosed {
+		c.conn, err = net.DialTimeout("tcp4", remoteAddr.Addr, time.Duration(DialTimeout)*time.Millisecond)
+		if err != nil {
+			return err
+		}
+		c.rpcClient = rpc.NewClient(c.conn)
+		c.connClosed = false
+	}
+
+	fullProcName := fmt.Sprintf("%v.%v", remoteAddr.Addr, procName)
+	c.conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Millisecond))
+	err = c.rpcClient.Call(fullProcName, request, reply)
+	if err != nil {
+		c.rpcClient.Close()
+		c.connClosed = true
+		return err
+	}
+
+	return nil
+}
+
+func doDialCloseRemoteCall(remoteNode *NodeAddr, procName string, request interface{}, reply interface{}) error {
+	client, err := rpc.Dial("tcp", remoteNode.Addr)
+	if err != nil {
+		return err
+	}
+
+	// Make the request
+	fullProcName := fmt.Sprintf("%v.%v", remoteNode.Addr, procName)
+	err = client.Call(fullProcName, request, reply)
+	client.Close()
+
+	return err
+}
 
 //makeRemoteCall
 func makeRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, reply interface{}, timeout int) error {
@@ -180,8 +263,8 @@ func makeRemoteCall(remoteAddr *NodeAddr, procName string, request interface{}, 
 			fmt.Fprintf(os.Stderr, "Dial MaxRetry for: %s\n", remoteAddr.Addr)
 			return fmt.Errorf("Dial MaxRetry. Server Dead\n")
 		} else {
-			client, err = rpc.Dial("unix", remoteAddr.Addr)
-			//client, err = rpc.Dial("tcp4", remoteAddr.Addr)
+			//client, err = rpc.Dial("unix", remoteAddr.Addr)
+			client, err = rpc.Dial("tcp4", remoteAddr.Addr)
 			if err != nil {
 				replicaConnRetry[remoteAddr.Addr] = replicaConnRetry[remoteAddr.Addr] + 1
 				fmt.Fprintf(os.Stderr, "Dial Failed: %v\n", err)

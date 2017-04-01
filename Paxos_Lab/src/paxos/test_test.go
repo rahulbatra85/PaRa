@@ -368,6 +368,7 @@ func TestManyForget(t *testing.T) {
 //
 // does paxos forgetting actually free the memory?
 //
+/*
 func TestForgetMem(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -451,7 +452,7 @@ func TestForgetMem(t *testing.T) {
 	}
 
 	fmt.Printf("  ... Passed\n")
-}
+}*/
 
 //
 // does Max() work after Done()s?

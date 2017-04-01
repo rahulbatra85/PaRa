@@ -92,7 +92,7 @@ func (rf *Raft) do_candidate() (nextState RaftState) {
 			rf.handleAppendEntries(msg)
 		case msg := <-rf.requestVoteMsgCh:
 			DPrintf("Serv[%d], Rcv on RequestVoteMsgCh\n", rf.me)
-			if rf.handleCandidateOrLeaderRequestVote(msg) == true {
+			if rf.handleCandidateOrLeaderRequestVote(msg) != true {
 				return FOLLOWER
 			}
 		case <-rf.appendEntriesReplyCh:
@@ -138,7 +138,7 @@ func (rf *Raft) do_leader() (nextState RaftState) {
 				return FOLLOWER
 			}
 		case msg := <-rf.requestVoteMsgCh:
-			if rf.handleCandidateOrLeaderRequestVote(msg) == true {
+			if rf.handleCandidateOrLeaderRequestVote(msg) != true {
 				return FOLLOWER
 			}
 		case <-rf.appendEntriesReplyCh:

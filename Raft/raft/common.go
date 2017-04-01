@@ -20,6 +20,8 @@ const (
 	ClientReplyCode_REQUEST_SUCCESSFUL
 	ClientReplyCode_RETRY
 	ClientReplyCode_NOT_LEADER
+	ClientReplyCode_INVALID_KEY
+	ClientReplyCode_INVALID_COMMAND
 )
 
 type OpType int

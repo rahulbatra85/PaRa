@@ -29,6 +29,7 @@ func (r *RaftNode) Start(request *StartRequest) error {
 	r.INF("Received START")
 	for _, node := range request.OtherNodes {
 		r.othersAddr = append(r.othersAddr, node)
+		r.conns[*node] = MakeConnection(node)
 	}
 
 	r.INF("OtherNode=%v", r.othersAddr)

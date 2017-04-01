@@ -4,6 +4,25 @@ import (
 	"fmt"
 )
 
+/*
+const (
+	HeartbeatFrequency  = 200
+	ElectionTimeout     = 800
+	ElectionTimeoutBase = 300
+	RPCTimeout          = 500
+	ClientRPCTimeout    = 1000
+	DialTimeout         = 100
+)*/
+
+const (
+	HeartbeatFrequency  = 2000
+	ElectionTimeout     = 4000
+	ElectionTimeoutBase = 4000
+	RPCTimeout          = 1000
+	ClientRPCTimeout    = 10000
+	DialTimeout         = 100
+)
+
 type RaftConfig struct {
 	NodeIdSize          int
 	ClusterSize         int
@@ -19,9 +38,9 @@ func CreateRaftConfig() *RaftConfig {
 	c.NodeIdSize = 2
 	c.ClusterSize = 3
 	c.Majority = (c.ClusterSize + 1) / 2
-	c.HeartbeatFrequency = 1500
-	c.ElectionTimeout = 6000
-	c.ElectionTimeoutBase = 2500
+	c.HeartbeatFrequency = HeartbeatFrequency
+	c.ElectionTimeout = ElectionTimeout
+	c.ElectionTimeoutBase = ElectionTimeoutBase
 	c.RPCCancelTimeout = 500
 	return c
 }

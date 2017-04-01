@@ -111,7 +111,7 @@ func (r *RaftNode) do_candidate() (nextState RaftState) {
 			}
 		case msg := <-r.requestVoteMsgCh:
 			r.DBG(" Rcv on RequestVoteMsgCh\n")
-			if r.handleCandidateOrLeaderRequestVote(msg) == true {
+			if r.handleCandidateOrLeaderRequestVote(msg) != true {
 				return RaftState_FOLLOWER
 			}
 		case <-r.appendEntriesReplyCh:
@@ -170,11 +170,13 @@ func (r *RaftNode) do_leader() (nextState RaftState) {
 			return RaftState_FOLLOWER
 		case msg := <-r.appendEntriesMsgCh:
 			if r.handleAppendEntries(msg) == true {
+				r.INF("Falling Back to FOLLOWER")
 				r.UpdateSM()
 				return RaftState_FOLLOWER
 			}
 		case msg := <-r.requestVoteMsgCh:
-			if r.handleCandidateOrLeaderRequestVote(msg) == true {
+			if r.handleCandidateOrLeaderRequestVote(msg) != true {
+				r.INF("Falling Back to FOLLOWER")
 				return RaftState_FOLLOWER
 			}
 		case <-r.appendEntriesReplyCh:
@@ -208,7 +210,7 @@ func (r *RaftNode) requestVotes() {
 				//reply := &RequestVoteReply{}
 				r.DBG(" Send ReqVote to %v\n", n.Id)
 				//reply, err := r.RequestVoteRPC(&n, args)
-				reply, err := RequestVoteRPC(&n, args)
+				reply, err := r.RequestVoteRPC(&n, args)
 				if err == nil {
 					r.requestVoteReplyCh <- *reply
 				}
@@ -257,7 +259,7 @@ func (r *RaftNode) sendHeartBeats(fallBack chan bool, sentToMajority chan bool) 
 
 				r.INF(" Send AE to %v\n", n.Id)
 				//reply, err := r.AppendEntriesRPC(&n, req)
-				reply, err := AppendEntriesRPC(&n, req)
+				reply, err := r.AppendEntriesRPC(&n, req)
 				if err == nil {
 					if reply.Term > r.getCurrentTerm() {
 						r.setCurrentTerm(reply.Term)
@@ -549,14 +551,10 @@ func (r *RaftNode) UpdateSM() {
 				delete(r.clientRegisterMap, r.lastApplied)
 			}
 		} else {
-			value, err := r.app.ApplyOperation(*entry.Cmd)
+			value, code := r.app.ApplyOperation(*entry.Cmd)
 			reply := ClientReply{}
-			if err != nil {
-				reply.Code = ClientReplyCode_REQUEST_FAILED
-			} else {
-				r.DBG("SM: ClientRequest Applied")
-				reply.Code = ClientReplyCode_REQUEST_SUCCESSFUL
-			}
+			reply.Code = code
+			r.DBG("SM: ClientRequest Applied")
 			reply.LeaderNode = &r.leaderNode
 			reply.SeqNum = entry.Cmd.SeqNum
 			reply.Value = value
