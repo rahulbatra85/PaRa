@@ -1,0 +1,46 @@
+Implements Raft Protocol as specified in the paper by Diego Ongaro et. al
+
+Notes: Startup Code and some code structure is adapted from MIT and Brown University Distributed Systems
+Courses. However, the crux of the code(raft_server.go) is implemented by the author(Rahul Batra)
+
+//To Build Server
+go build raft_main.go
+
+//To Build Client
+go build client_main.go
+
+
+//Run(default cluster size is 3. Change in raft/config.go)
+./raft_main  -port 8010
+
+./raft_main  -cAddr 127.0.1.1:8010 -port 8020
+
+./raft_main  -cAddr 127.0.1.1:8010 -port 8030
+
+//Run Client
+//Client takes in the addresses of all the cluster nodes
+./client_main -l 127.0.1.1:8010 -l 127.0.1.1:8020 -l 127.0.1.1:8030
+
+
+//With golang Delve Debugger
+//For more details on Delve, see here https://github.com/derekparker/delve
+dlv exec ./raft_main -- -port 8010
+
+dlv exec ./raft_main -- -cAddr 127.0.1.1:8010 -port 8020
+
+dlv exec ./raft_main -- -cAddr 127.0.1.1:8010 -port 8030
+
+./client_main -l 127.0.1.1:8010 -l 127.0.1.1:8020 -l 127.0.1.1:8030
+
+
+
+//With golang Delve Debugger(Unix Sockets)
+//First change all net.Dial calls in raft/raft_rpc.go to use unix
+//Second raft/raft.go to use UnixListener
+dlv exec ./raft_main -- -port 8010
+
+dlv exec ./raft_main -- -cAddr /var/tmp/raft-1000/rf-10089-8010 -port 8020
+
+dlv exec ./raft_main -- -cAddr /var/tmp/raft-1000/rf-10089-8010 -port 8030
+
+./client_main -l /var/tmp/raft-1000/rf-10107-8020 -l /var/tmp/raft-1000/rf-10148-8030 -l /var/tmp/raft-1000/rf-10089-8010
