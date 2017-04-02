@@ -3,6 +3,7 @@ package raft
 import (
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 )
 
@@ -121,7 +122,7 @@ func (rf *Raft) do_candidate() (nextState RaftState) {
 //is in LEADER state
 //
 func (rf *Raft) do_leader() (nextState RaftState) {
-	DPrintf("Serv[%d], Leader State\n", rf.me)
+	DPrintf("Serv[%d], Leader State Enter\n", rf.me)
 	for p := 0; p < len(rf.peers); p++ {
 		rf.nextIndex[p] = rf.GetLastLogIndex() + 1
 		if p != rf.me {
@@ -217,6 +218,7 @@ func (rf *Raft) sendHeartBeats() (fallBack, sentToMajority bool) {
 			req.PrevLogTerm = rf.GetLogEntry(rf.nextIndex[p] - 1).Term
 			if rf.GetLastLogIndex() >= rf.nextIndex[p] {
 				DPrintf("Serv[%d], AppendEntries[%d] PrevLogIdx:%d\n", rf.me, p, req.PrevLogIdx)
+
 				req.Entries = make([]LogEntry, rf.GetLastLogIndex()-rf.nextIndex[p]+1)
 				for i, j := rf.nextIndex[p], 0; i <= rf.GetLastLogIndex(); i, j = i+1, j+1 {
 					req.Entries[j] = rf.GetLogEntry(i)
@@ -224,7 +226,7 @@ func (rf *Raft) sendHeartBeats() (fallBack, sentToMajority bool) {
 			} else {
 				req.Entries = nil
 			}
-			req.LeaderCommit = rf.commitIndex
+			req.LeaderCommit = (int)(atomic.LoadInt64(&rf.commitIndex))
 
 			ok := rf.sendAppendEntries(p, req, reply)
 			if ok == true {
@@ -235,8 +237,8 @@ func (rf *Raft) sendHeartBeats() (fallBack, sentToMajority bool) {
 					DPrintf("Serv[%d], Send Heartbeats Exit %v %v\n", rf.me, fallBack, sentToMajority)
 					return fallBack, sentToMajority
 				}
+				successCnt++
 				if reply.Success == true {
-					successCnt++
 					rf.nextIndex[p] = req.PrevLogIdx + len(req.Entries) + 1
 					rf.matchIndex[p] = req.PrevLogIdx + len(req.Entries)
 				} else {
@@ -331,11 +333,11 @@ func (rf *Raft) handleAppendEntries(msg AppendEntriesMsg) bool {
 	}
 
 	//Update commit index
-	if msg.args.LeaderCommit > rf.commitIndex {
+	if msg.args.LeaderCommit > int(rf.commitIndex) {
 		if msg.args.LeaderCommit > (i - 1) {
-			rf.commitIndex = msg.args.LeaderCommit
+			rf.commitIndex = int64(msg.args.LeaderCommit)
 		} else if msg.args.LeaderCommit < (i - 1) {
-			rf.commitIndex = i - 1
+			rf.commitIndex = int64(i - 1)
 		}
 		DPrintf("Serv[%d], Updt CommitIdx: %d\n", rf.me, rf.commitIndex)
 	}
@@ -352,7 +354,7 @@ func (rf *Raft) handleAppendEntries(msg AppendEntriesMsg) bool {
 //handleRequestVote
 //
 func (rf *Raft) handleRequestVote(msg RequestVoteMsg) {
-	DPrintf("Serv[%d], Handler Request Vote Enter\n", rf.me)
+	DPrintf("Serv[%d], Handler Request Vote Enter %v\n", rf.me, msg.args)
 	reply := RequestVoteReply{}
 
 	if rf.getCurrentTerm() > msg.args.Term {
@@ -440,10 +442,13 @@ func (rf *Raft) UpdateSM() {
 	for {
 		select {
 		case <-rf.makeUpdateSMPeriod():
-			for rf.commitIndex > rf.lastApplied {
+			cmtIdx := (int)(atomic.LoadInt64(&rf.commitIndex))
+			DPrintf("Serv[%d]: UpdateSM CmtIdx=%d, LastApp: %d\n", rf.me, cmtIdx, rf.lastApplied)
+
+			for cmtIdx > rf.lastApplied {
 				rf.lastApplied++
-				DPrintf("                         Serv[%d], Log: %v\n", rf.me, rf.Log)
-				DPrintf("                         Serv[%d], Updt SM: %d\n", rf.me, rf.lastApplied)
+				DPrintf("Serv[%d]: UpdateSM, Log: %v\n", rf.me, rf.Log)
+				DPrintf("Serv[%d]: UpdateSM  LastApplied: %d\n", rf.me, rf.lastApplied)
 				rf.applyMsgCh <- ApplyMsg{Index: rf.lastApplied, Command: rf.GetLogEntry(rf.lastApplied).Cmd}
 			}
 		}
@@ -472,9 +477,9 @@ func (rf *Raft) UpdateCommitIdx() {
 			N = mIdx[n]
 		}
 	}
-	DPrintf("			Serv[%d], Updt CommitIdx N=%d, mIdx=%v\n", rf.me, N, mIdx)
-	if (rf.Log[N].Term == rf.CurrentTerm) && rf.commitIndex < N {
-		rf.commitIndex = N
-		DPrintf("		Serv[%d], Updt CommitIdx: %d\n", rf.me, rf.commitIndex)
+	DPrintf("Update CommitIdx: Serv[%d], Updt CommitIdx N=%d, mIdx=%v\n", rf.me, N, mIdx)
+	if (rf.Log[N].Term == rf.CurrentTerm) && int(rf.commitIndex) < N {
+		atomic.StoreInt64(&rf.commitIndex, int64(N))
+		DPrintf("Update CommitIdx: Serv[%d], Updt CommitIdx: %d\n", rf.me, rf.commitIndex)
 	}
 }

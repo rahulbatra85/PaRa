@@ -41,6 +41,13 @@ func NextValue(prev string, val string) string {
 	return prev + val
 }
 
+var clientID int
+
+func NextClientId() int {
+	clientID++
+	return clientID
+}
+
 func TestBasic(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -56,10 +63,10 @@ func TestBasic(t *testing.T) {
 		kva[i] = StartServer(kvh, i)
 	}
 
-	ck := MakeClerk(kvh)
+	ck := MakeClerk(kvh, NextClientId())
 	var cka [nservers]*Clerk
 	for i := 0; i < nservers; i++ {
-		cka[i] = MakeClerk([]string{kvh[i]})
+		cka[i] = MakeClerk([]string{kvh[i]}, NextClientId())
 	}
 
 	fmt.Printf("Test: Basic put/append/get ...\n")
@@ -89,7 +96,7 @@ func TestBasic(t *testing.T) {
 			go func(me int) {
 				defer func() { ca[me] <- true }()
 				ci := (rand.Int() % nservers)
-				myck := MakeClerk([]string{kvh[ci]})
+				myck := MakeClerk([]string{kvh[ci]}, NextClientId())
 				if (rand.Int() % 1000) < 500 {
 					myck.Put("b", strconv.Itoa(rand.Int()))
 				} else {
@@ -128,10 +135,10 @@ func TestDone(t *testing.T) {
 	for i := 0; i < nservers; i++ {
 		kva[i] = StartServer(kvh, i)
 	}
-	ck := MakeClerk(kvh)
+	ck := MakeClerk(kvh, NextClientId())
 	var cka [nservers]*Clerk
 	for pi := 0; pi < nservers; pi++ {
-		cka[pi] = MakeClerk([]string{kvh[pi]})
+		cka[pi] = MakeClerk([]string{kvh[pi]}, NextClientId())
 	}
 
 	fmt.Printf("Test: server frees Paxos log memory...\n")
@@ -248,7 +255,7 @@ func TestPartition(t *testing.T) {
 
 	var cka [nservers]*Clerk
 	for i := 0; i < nservers; i++ {
-		cka[i] = MakeClerk([]string{port(tag, i)})
+		cka[i] = MakeClerk([]string{port(tag, i)}, NextClientId())
 	}
 
 	fmt.Printf("Test: No partition ...\n")
@@ -334,7 +341,7 @@ func randclerk(kvh []string) *Clerk {
 		j := rand.Intn(i + 1)
 		sa[i], sa[j] = sa[j], sa[i]
 	}
-	return MakeClerk(sa)
+	return MakeClerk(sa, NextClientId())
 }
 
 // check that all known appends are present in a value,
@@ -377,10 +384,10 @@ func TestUnreliable(t *testing.T) {
 		kva[i].setunreliable(true)
 	}
 
-	ck := MakeClerk(kvh)
+	ck := MakeClerk(kvh, NextClientId())
 	var cka [nservers]*Clerk
 	for i := 0; i < nservers; i++ {
-		cka[i] = MakeClerk([]string{kvh[i]})
+		cka[i] = MakeClerk([]string{kvh[i]}, NextClientId())
 	}
 
 	fmt.Printf("Test: Basic put/get, unreliable ...\n")
@@ -416,11 +423,13 @@ func TestUnreliable(t *testing.T) {
 				myck.Append(key, "2")
 				vv = NextValue(vv, "2")
 				time.Sleep(100 * time.Millisecond)
-				if myck.Get(key) != vv {
-					t.Fatalf("wrong value")
+				s := myck.Get(key)
+				if s != vv {
+					t.Fatalf("wrong value. Key=%s Got=%s Wanted=%s\n", key, s, vv)
 				}
-				if myck.Get(key) != vv {
-					t.Fatalf("wrong value")
+				s = myck.Get(key)
+				if s != vv {
+					t.Fatalf("wrong value. Key=%s Got=%s Wanted=%s\n", key, s, vv)
 				}
 				ok = true
 			}(cli)
@@ -543,7 +552,7 @@ func TestHole(t *testing.T) {
 	for iters := 0; iters < 5; iters++ {
 		part(t, tag, nservers, []int{0, 1, 2, 3, 4}, []int{}, []int{})
 
-		ck2 := MakeClerk([]string{port(tag, 2)})
+		ck2 := MakeClerk([]string{port(tag, 2)}, NextClientId())
 		ck2.Put("q", "q")
 
 		done := int32(0)
@@ -556,7 +565,7 @@ func TestHole(t *testing.T) {
 				defer func() { ca[cli] <- ok }()
 				var cka [nservers]*Clerk
 				for i := 0; i < nservers; i++ {
-					cka[i] = MakeClerk([]string{port(tag, i)})
+					cka[i] = MakeClerk([]string{port(tag, i)}, NextClientId())
 				}
 				key := strconv.Itoa(cli)
 				last := ""
@@ -654,7 +663,7 @@ func TestManyPartition(t *testing.T) {
 				}
 			}
 			part(t, tag, nservers, pa[0], pa[1], pa[2])
-			time.Sleep(time.Duration(rand.Int63()%200) * time.Millisecond)
+			time.Sleep(time.Duration(rand.Int63()%500) * time.Millisecond)
 		}
 	}()
 
@@ -673,7 +682,7 @@ func TestManyPartition(t *testing.T) {
 				j := rand.Intn(i + 1)
 				sa[i], sa[j] = sa[j], sa[i]
 			}
-			myck := MakeClerk(sa)
+			myck := MakeClerk(sa, NextClientId())
 			key := strconv.Itoa(cli)
 			last := ""
 			myck.Put(key, last)

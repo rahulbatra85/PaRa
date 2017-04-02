@@ -12,163 +12,192 @@ import "syscall"
 import "encoding/gob"
 import "math/rand"
 import "time"
-import "strings"
-import "strconv"
 
 const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug > 0 {
-		log.Printf(format, a...)
+		fmt.Printf(format, a...)
 	}
 	return
 }
 
 type Op struct {
-	Op       string
+	Type     string
 	Key      string
 	Value    string
 	KVServer int
-	ReqID    int64
-	ClientID string
+	ReqID    int
+	ClientID int
+}
+type ApplyMsg struct {
+	Seq     int
+	Command interface{}
+	Status  paxos.Fate
 }
 
 type KVPaxos struct {
-	mu         sync.Mutex
+	muKVDB     sync.RWMutex
 	l          net.Listener
 	me         int
 	dead       int32 // for testing
 	unreliable int32 // for testing
 	px         *paxos.Paxos
 
-	kvdb    map[string]string //Key Value Database
-	seqUsed int
-}
-
-func (kv *KVPaxos) waitPxInstance(seq int) {
-	decided := false
-	to := 10 * time.Millisecond
-	for !decided {
-		status, _ := kv.px.Status(seq)
-		if status != paxos.Decided {
-			time.Sleep(to)
-			if to < 10*time.Second {
-				to *= 2
-			}
-		} else {
-			decided = true
-		}
-	}
-}
-
-func (kv *KVPaxos) updateKVDB(r Op) {
-	kv.kvdb[r.ClientID+":LastReqID"] = strconv.FormatInt(r.ReqID, 10)
-	if r.Op == "Put" {
-		kv.kvdb[r.Key] = r.Value
-		kv.kvdb[r.ClientID+":LastReply"] = OK + ":" + ""
-	} else if r.Op == "Append" {
-		val, ok := kv.kvdb[r.Key]
-		if ok {
-			kv.kvdb[r.Key] = val + r.Value
-		} else {
-			kv.kvdb[r.Key] = r.Value
-		}
-		kv.kvdb[r.ClientID+":LastReply"] = OK + ":" + ""
-	} else if r.Op == "Get" {
-		//Set Reply Args
-		val, ok := kv.kvdb[r.Key]
-		if ok {
-			kv.kvdb[r.ClientID+":LastReply"] = OK + ":" + val
-		} else {
-			kv.kvdb[r.ClientID+":LastReply"] = ErrNoKey + ":" + ""
-		}
-	}
-
-	kv.seqUsed = kv.seqUsed + 1
+	kvdb           map[string]string //Key Value Database
+	clientReplyMap map[int]ClientApplied
 }
 
 func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
+	DPrintf("KVSERVER[%d]: Get Enter. %v\n", kv.me, *args)
+	kv.muKVDB.Lock()
+	defer kv.muKVDB.Unlock()
 
 	//Parse Args and create Op
 	logEntry := Op{}
-	logEntry.Op = "Get"
+	logEntry.Type = "Get"
 	logEntry.Key = args.Key
 	logEntry.KVServer = kv.me
 	logEntry.ReqID = args.ReqID
 	logEntry.ClientID = args.ClientID
-	//	fmt.Printf("%v Get %v\n", kv.me, logEntry)
 
-	done := false
-	for !done {
-		if kv.kvdb[args.ClientID+":LastReqID"] == strconv.FormatInt(args.ReqID, 10) {
-			done = true
-			s := strings.Split(kv.kvdb[args.ClientID+":LastReply"], ":")
-			if s[0] == OK {
-				reply.Err = OK
-				reply.Value = s[1]
-			} else if s[0] == ErrNoKey {
-				reply.Err = ErrNoKey
-			}
-		} else {
-			//Increment Seq and call start
-			seq := kv.seqUsed + 1
+	//If this request was last applied for this client
+	rep, found := kv.GetClientReplyMap(args.ClientID, args.ReqID)
+	if found == true && args.ReqID == rep.ReqID {
+		DPrintf("KVSERVER[%d]: Replayed Request %v\n", kv.me, args)
+		reply.Err = rep.Err
+		reply.Value = rep.Value
+		return nil
+		//If this request was applied previously, but old than the last applied for this client
+	} else if found == true && args.ReqID < rep.ReqID {
+		DPrintf("KVSERVER[%d]: Old Request. Ignoring %v\n", kv.me, args)
+		return fmt.Errorf("Old request")
+	} else {
+		done := false
+		for !done {
+			//Let's try to find a slot for this in the log
+			seq := kv.px.Max() + 1
 			kv.px.Start(seq, logEntry)
+			DPrintf("KVSERVER[%d]: Trying GET on seq=%d\n", kv.me, seq)
 
-			//Wait for status to be decided
-			kv.waitPxInstance(seq)
+			//Wait until this sequence has been decided
+			status, v := kv.waitPxInstance(seq)
+			if status == paxos.Decided {
+				DPrintf("KVSERVER[%d]: Seq=%d Decided\n", kv.me, seq)
+				r := v.(Op)
 
-			var r Op
-			_, v := kv.px.Status(seq)
-			r = v.(Op)
-			kv.updateKVDB(r)
+				//Should we apply this seq?
+				cApply := ClientApplied{}
+				found := false
+				cApply, found = kv.GetClientReplyMap(r.ClientID, r.ReqID)
+				if found == false || (found == true && r.ReqID > cApply.ReqID) {
+					cApply.ReqID = r.ReqID
+					cApply.Err = OK
+					cApply.Value = ""
+					if r.Type == "Put" {
+						kv.PutKVDB(r.Key, r.Value)
+					} else if r.Type == "Append" {
+						kv.AppendKVDB(r.Key, r.Value)
+					} else if r.Type == "Get" {
+						value, err := kv.GetKVDB(r.Key)
+						cApply.Err = err
+						cApply.Value = value
+					}
+					kv.PutClientReplyMap(r.ClientID, cApply)
+					DPrintf("KVSERVER[%d]: Seq=%d with args=%v applied", kv.me, seq, r)
+				}
+
+				//Do we respond to this client request? or try again?
+				if r.ClientID == args.ClientID && r.ReqID >= args.ReqID {
+					//done
+					reply.Err = cApply.Err
+					reply.Value = cApply.Value
+					kv.px.Done(seq)
+					done = true
+					DPrintf("KVSERVER[%d]: Success with seq=%d for req=%v\n", kv.me, seq, args)
+				}
+			} else {
+				DPrintf("KVSERVER[%d]: Seq=%d already forgotten!\n", kv.me, seq)
+			}
 		}
 	}
-
-	// Your code here.
+	DPrintf("KVSERVER[%d]: GET Exit. %v\n", kv.me, args)
 	return nil
 }
 
 func (kv *KVPaxos) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
-	// Your code here.
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
+	DPrintf("KVSERVER[%d]: PUT Enter %v\n", kv.me, *args)
 
-	//Parse Args and create Op
+	kv.muKVDB.Lock()
+	defer kv.muKVDB.Unlock()
+
 	logEntry := Op{}
-	logEntry.Op = args.Op
+	logEntry.Type = args.Op
 	logEntry.Key = args.Key
 	logEntry.Value = args.Value
 	logEntry.KVServer = kv.me
 	logEntry.ReqID = args.ReqID
 	logEntry.ClientID = args.ClientID
-	//	fmt.Printf("%v PutAppend %v\n", kv.me, logEntry)
 
-	done := false
-	for !done {
-		//Is this a duplicate request
-		if kv.kvdb[args.ClientID+":LastReqID"] == strconv.FormatInt(args.ReqID, 10) {
-			done = true
-		} else {
-			//Increment Seq and call start
-			seq := kv.seqUsed + 1
+	//If this request was last applied for this client
+	rep, found := kv.GetClientReplyMap(args.ClientID, args.ReqID)
+	if found == true && args.ReqID == rep.ReqID {
+		DPrintf("KVSERVER[%d]: Replayed Request %v\n", kv.me, args)
+		reply.Err = rep.Err
+		return nil
+		//If this request was applied previously, but older than the last applied for this client
+	} else if found == true && args.ReqID < rep.ReqID {
+		return fmt.Errorf("Old Request")
+		DPrintf("KVSERVER[%d]: Old Request. Ignoring %v\n", kv.me, args)
+	} else {
+		done := false
+		for !done {
+			//Let's try to find a slot for this in the log
+			seq := kv.px.Max() + 1
 			kv.px.Start(seq, logEntry)
+			DPrintf("KVSERVER[%d]: Trying GET on seq=%d\n", kv.me, seq)
 
-			//Wait for status to be decided
-			kv.waitPxInstance(seq)
+			//Wait until this sequence has been decided
+			status, v := kv.waitPxInstance(seq)
+			if status == paxos.Decided {
+				DPrintf("KVSERVER[%d]: Seq=%d Decided\n", kv.me, seq)
+				r := v.(Op)
 
-			//Apply decided value
-			var r Op
-			_, v := kv.px.Status(seq)
-			r = v.(Op)
-			kv.updateKVDB(r)
+				//Should we apply this seq?
+				cApply := ClientApplied{}
+				found := false
+				cApply, found = kv.GetClientReplyMap(r.ClientID, r.ReqID)
+				if found == false || (found == true && r.ReqID > cApply.ReqID) {
+					cApply.ReqID = r.ReqID
+					cApply.Err = OK
+					cApply.Value = ""
+					if r.Type == "Put" {
+						kv.PutKVDB(r.Key, r.Value)
+					} else if r.Type == "Append" {
+						kv.AppendKVDB(r.Key, r.Value)
+					} else if r.Type == "Get" {
+						value, err := kv.GetKVDB(r.Key)
+						cApply.Err = err
+						cApply.Value = value
+					}
+					kv.PutClientReplyMap(r.ClientID, cApply)
+					DPrintf("KVSERVER[%d]: Seq=%d with args=%v applied", kv.me, seq, r)
+				}
+
+				//Do we respond to this client request? or try again?
+				if r.ClientID == args.ClientID && r.ReqID >= args.ReqID {
+					reply.Err = cApply.Err
+					kv.px.Done(seq)
+					done = true
+					DPrintf("KVSERVER[%d]: Success with seq=%d for req=%v\n", kv.me, seq, args)
+				}
+			} else {
+				DPrintf("KVSERVER[%d]: Seq=%d already forgotten!\n", kv.me, seq)
+			}
 		}
 	}
 
-	//Set Reply Args
-	reply.Err = OK
-
+	DPrintf("KVSERVER[%d]: PUT Exit. %v\n", kv.me, *args)
 	return nil
 }
 
@@ -205,16 +234,14 @@ func (kv *KVPaxos) isunreliable() bool {
 // me is the index of the current server in servers[].
 //
 func StartServer(servers []string, me int) *KVPaxos {
-	// call gob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
 	gob.Register(Op{})
 
 	kv := new(KVPaxos)
 	kv.me = me
 
-	// Your initialization code here.
 	kv.kvdb = make(map[string]string)
-	kv.seqUsed = -1
+	kv.clientReplyMap = make(map[int]ClientApplied)
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(kv)
@@ -258,4 +285,54 @@ func StartServer(servers []string, me int) *KVPaxos {
 	}()
 
 	return kv
+}
+
+func (kv *KVPaxos) GetKVDB(key string) (string, Err) {
+	DPrintf("KVSERVER[%d]: GetKVDB %s\n", kv.me, key)
+	val, ok := kv.kvdb[key]
+	if ok {
+		return val, "OK"
+	} else {
+		return "", "ErrNoKey"
+	}
+}
+
+func (kv *KVPaxos) PutKVDB(key string, value string) {
+	DPrintf("KVSERVER[%d]: PutKVDB %s %s\n", kv.me, key, value)
+	kv.kvdb[key] = value
+}
+
+func (kv *KVPaxos) AppendKVDB(key string, value string) {
+	DPrintf("KVSERVER[%d]: AppendKVDB %s %s\n", kv.me, key, value)
+	kv.kvdb[key] = kv.kvdb[key] + value
+}
+
+func (kv *KVPaxos) GetClientReplyMap(id int, ReqId int) (ClientApplied, bool) {
+	reply, ok := kv.clientReplyMap[id]
+	if ok {
+		return reply, true
+	} else {
+		DPrintf("KVSERVER[%d]: GetClientReply not found Id=%d ReqId=%d\n", kv.me, id, ReqId)
+		return reply, false
+	}
+}
+
+func (kv *KVPaxos) PutClientReplyMap(id int, reply ClientApplied) {
+	DPrintf("KVSERVER[%d]: PutClientReply Id=%d ReqId=%d\n", kv.me, id, reply.ReqID)
+	kv.clientReplyMap[id] = reply
+}
+
+func (kv *KVPaxos) waitPxInstance(seq int) (paxos.Fate, interface{}) {
+	to := 10 * time.Millisecond
+	for {
+		status, op := kv.px.Status(seq)
+		if status == paxos.Pending {
+			time.Sleep(to)
+			if to < 10*time.Second {
+				to *= 2
+			}
+		} else {
+			return status, op
+		}
+	}
 }

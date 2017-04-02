@@ -165,9 +165,9 @@ func (px *Paxos) propose(seq int, v interface{}) {
 		reply *PrepareRespArgs
 		ok    bool
 	}
-	//while not decided:
 	m := 1
-	//fmt.Printf(" %s %d %v Phase 1\n", pxme, seq, v)
+
+	DPrintf(" %s %d %v Phase 1\n", pxme, seq, v)
 	for thisDecided != Decided && px.isdead() != true {
 		//choose n, unique and higher than any n seen so far
 		n := (px.me + 1) * m //Initial value of n
@@ -201,7 +201,7 @@ func (px *Paxos) propose(seq int, v interface{}) {
 		maxNa := 0
 		var maxVa interface{}
 		maxVa = nil
-		//fmt.Printf("%v %d %v PrepareResponses Gathering\n", pxme, seq, v)
+		DPrintf("%v %d %v PrepareResponses Gathering\n", pxme, seq, v)
 		px.mu.Lock()
 		for p, pci := range replyMap {
 
@@ -224,7 +224,7 @@ func (px *Paxos) propose(seq int, v interface{}) {
 		//////////////////////////////////////////////
 		//If prepareOK from majority:
 		if nok >= len(px.peers)/2+1 {
-			//fmt.Printf(" %s %d %v Phase 2 Majority \n", pxme, seq, v)
+			DPrintf(" %s %d %v Phase 2 Majority \n", pxme, seq, v)
 			//Choose v = va with highest na; Othwerwise, choose own v
 			if maxNa != 0 {
 				v = maxVa
@@ -259,7 +259,7 @@ func (px *Paxos) propose(seq int, v interface{}) {
 			}
 
 			//Gather responses
-			//fmt.Printf("%v %d %v AcceptResponses Gathering\n", pxme, seq, v)
+			DPrintf("%v %d %v AcceptResponses Gathering\n", pxme, seq, v)
 			nok := 0
 			for _, ac := range replyMap {
 				if ac.ok && ac.reply.OK {
@@ -273,7 +273,7 @@ func (px *Paxos) propose(seq int, v interface{}) {
 			//if AcceptOK(n) from majority:
 			//send Decided(v) to all
 			if nok >= len(px.peers)/2+1 {
-				//fmt.Printf(" %s %d %v Phase 3 Majority \n", pxme, seq, v)
+				DPrintf(" %s %d %v Phase 3 Majority \n", pxme, seq, v)
 				for _, p := range px.peers {
 					if p != pxme {
 						args := &DecidedArgs{}
@@ -289,7 +289,7 @@ func (px *Paxos) propose(seq int, v interface{}) {
 						px.pxInstances[seq] = pi
 						px.mu.Unlock()
 						thisDecided = Decided
-						//	fmt.Printf(" %s %d %v Decided\n", pxme, seq, v)
+						DPrintf(" %s %d %v Decided\n", pxme, seq, v)
 					}
 				}
 			}
@@ -297,7 +297,7 @@ func (px *Paxos) propose(seq int, v interface{}) {
 
 		m = m + 1
 	}
-	//	fmt.Printf(" %s %d %v Exit\n", pxme, seq, v)
+	DPrintf(" %s %d %v Exit\n", pxme, seq, v)
 }
 
 //
@@ -479,9 +479,14 @@ func (px *Paxos) Status(seq int) (Fate, interface{}) {
 	if seq < min {
 		status = Forgotten
 	} else {
-		pxi := px.pxInstances[seq]
-		status = pxi.status
-		v = pxi.v
+		pxi, ok := px.pxInstances[seq]
+		if ok {
+			status = pxi.status
+			v = pxi.v
+		} else {
+			status = Pending
+			v = nil
+		}
 	}
 	return status, v
 }

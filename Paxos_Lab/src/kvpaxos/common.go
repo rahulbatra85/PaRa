@@ -12,8 +12,8 @@ type PutAppendArgs struct {
 	Key      string
 	Value    string
 	Op       string // "Put" or "Append"
-	ReqID    int64
-	ClientID string
+	ClientID int
+	ReqID    int
 }
 
 type PutAppendReply struct {
@@ -22,11 +22,17 @@ type PutAppendReply struct {
 
 type GetArgs struct {
 	Key      string
-	ReqID    int64
-	ClientID string
+	ClientID int
+	ReqID    int
 }
 
 type GetReply struct {
+	Err   Err
+	Value string
+}
+
+type ClientApplied struct {
+	ReqID int
 	Err   Err
 	Value string
 }

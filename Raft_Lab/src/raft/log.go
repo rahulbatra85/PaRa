@@ -40,6 +40,7 @@ func (rf *Raft) AppendLog(entry LogEntry) {
 	defer rf.stmu.Unlock()
 	rf.Log = append(rf.Log, entry)
 	rf.persist()
+	DPrintf("Serv[%d]: AppendLog=%v", rf.Log)
 }
 
 //
@@ -59,7 +60,8 @@ func (rf *Raft) AppendLogLeader(command interface{}) (int, int, bool) {
 		entry := LogEntry{Term: term, Cmd: command}
 		rf.Log = append(rf.Log, entry)
 		rf.persist()
-		DPrintf("Serv[%d], AppendLogLeader Idx:%d Cmd: %d Exit\n", rf.me, index, command.(int))
+		DPrintf("Serv[%d], AppendLogLeader Idx:%d  Exit\n", rf.me, index)
+		//DPrintf("Serv[%d], AppendLogLeader Idx:%d Cmd: %d Exit\n", rf.me, index, command.(raftkv.Op))
 	}
 
 	return index, term, isLeader
@@ -82,4 +84,5 @@ func (rf *Raft) RemoveLogEntry(idx int) {
 		rf.Log = rf.Log[:idx]
 	}
 	rf.persist()
+	DPrintf("Serv[%d]: RemoveLog=%v", rf.Log)
 }

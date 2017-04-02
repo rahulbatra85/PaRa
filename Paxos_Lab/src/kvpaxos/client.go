@@ -3,13 +3,13 @@ package kvpaxos
 import "net/rpc"
 import "crypto/rand"
 import "math/big"
-import "strconv"
 
 import "fmt"
 
 type Clerk struct {
 	servers []string
-	id      string
+	id      int
+	SeqNum  int
 }
 
 func nrand() int64 {
@@ -19,10 +19,10 @@ func nrand() int64 {
 	return x
 }
 
-func MakeClerk(servers []string) *Clerk {
+func MakeClerk(servers []string, id int) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
-	ck.id = strconv.FormatInt(nrand(), 10)
+	ck.id = id
 	return ck
 }
 
@@ -35,13 +35,6 @@ func MakeClerk(servers []string) *Clerk {
 // the return value is true if the server responded, and false
 // if call() was not able to contact the server. in particular,
 // the reply's contents are only valid if call() returned true.
-//
-// you should assume that call() will return an
-// error after a while if the server is dead.
-// don't provide your own time-out mechanism.
-//
-// please use call() to send all RPCs, in client.go and server.go.
-// please don't change this function.
 //
 func call(srv string, rpcname string,
 	args interface{}, reply interface{}) bool {
@@ -66,10 +59,10 @@ func call(srv string, rpcname string,
 // keeps trying forever in the face of all other errors.
 //
 func (ck *Clerk) Get(key string) string {
-	// You will have to modify this function.
+	ck.SeqNum++
 	args := GetArgs{}
 	args.Key = key
-	args.ReqID = nrand()
+	args.ReqID = ck.SeqNum
 	args.ClientID = ck.id
 	reply := &GetReply{}
 
@@ -77,13 +70,21 @@ func (ck *Clerk) Get(key string) string {
 	idx := 0
 	var retval string
 	for !done {
+		DPrintf("\tTrying GET Request to server[%d].\n", idx)
 		ok := call(ck.servers[idx], "KVPaxos.Get", args, reply)
-		if !ok || (reply.Err != OK && reply.Err != ErrNoKey) {
-			fmt.Printf("GET: %v Trying different servers %d\n", ck.id, idx)
+		if !ok {
+			DPrintf("\tRESP: Request to server[%d] Failed.\n", idx)
 			idx = (idx + 1) % len(ck.servers)
 		} else {
 			done = true
-			retval = reply.Value
+			if reply.Err == OK {
+				retval = reply.Value
+				DPrintf("\tRESP: Request Successful\n")
+				retval = reply.Value
+			} else {
+				DPrintf("\tRESP: Invalid Key\n")
+				retval = ""
+			}
 		}
 	}
 
@@ -94,24 +95,26 @@ func (ck *Clerk) Get(key string) string {
 // shared by Put and Append.
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	// You will have to modify this function.
+	ck.SeqNum++
 	args := PutAppendArgs{}
 	args.Key = key
 	args.Value = value
 	args.Op = op
-	args.ReqID = nrand()
+	args.ReqID = ck.SeqNum
 	args.ClientID = ck.id
 	reply := &PutAppendReply{}
 
 	done := false
 	idx := 0
 	for !done {
+		DPrintf("\tTrying PUT Request to server[%d].\n", idx)
 		ok := call(ck.servers[idx], "KVPaxos.PutAppend", args, reply)
-		if !ok || reply.Err != OK {
+		if !ok {
+			DPrintf("\tRESP: Request to server[%d] Failed.\n", idx)
 			idx = (idx + 1) % len(ck.servers)
-			fmt.Printf("PUT: %v Trying different servers %d\n", ck.id, idx)
 		} else {
 			done = true
+			DPrintf("\tRESP: Request Successful\n")
 		}
 	}
 }
@@ -119,6 +122,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 func (ck *Clerk) Put(key string, value string) {
 	ck.PutAppend(key, value, "Put")
 }
+
 func (ck *Clerk) Append(key string, value string) {
 	ck.PutAppend(key, value, "Append")
 }

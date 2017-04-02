@@ -62,7 +62,7 @@ type Raft struct {
 	Log         []LogEntry
 
 	//Volatile state on all servers
-	commitIndex int
+	commitIndex int64
 	lastApplied int
 
 	//Volatile state on leaders

@@ -13,9 +13,9 @@ import "fmt"
 import "time"
 import "math/rand"
 
-//import "sync/atomic"
+import "sync/atomic"
 
-//import "sync"
+import "sync"
 
 // The tester generously allows solutions to complete elections in one second
 // (much more than the paper's range of timeouts).
@@ -547,7 +547,7 @@ func TestPersist3(t *testing.T) {
 // The leader in a new term may try to finish replicating log entries that
 // haven't been committed yet.
 //
-/*
+
 func TestFigure8(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, false)
@@ -558,7 +558,8 @@ func TestFigure8(t *testing.T) {
 	cfg.one(rand.Int(), 1)
 
 	nup := servers
-	for iters := 0; iters < 1000; iters++ {
+	for iters := 0; iters < 200; iters++ {
+		fmt.Printf("Test: Iteration %d...\n", iters)
 		leader := -1
 		for i := 0; i < servers; i++ {
 			if cfg.rafts[i] != nil {
@@ -643,7 +644,8 @@ func TestFigure8Unreliable(t *testing.T) {
 	cfg.one(rand.Int()%10000, 1)
 
 	nup := servers
-	for iters := 0; iters < 1000; iters++ {
+	for iters := 0; iters < 200; iters++ {
+		fmt.Printf("Test: Iteration %d...\n", iters)
 		if iters == 200 {
 			cfg.setlongreordering(true)
 		}
@@ -682,6 +684,7 @@ func TestFigure8Unreliable(t *testing.T) {
 			cfg.connect(i)
 		}
 	}
+	fmt.Printf("\t connected back...\n")
 
 	cfg.one(rand.Int()%10000, servers)
 
@@ -749,6 +752,7 @@ func internalChurn(t *testing.T, unreliable bool) {
 		ret = values
 	}
 
+	fmt.Printf("\t churn  concurrent clients created\n")
 	ncli := 3
 	cha := []chan []int{}
 	for i := 0; i < ncli; i++ {
@@ -839,4 +843,4 @@ func TestReliableChurn(t *testing.T) {
 
 func TestUnreliableChurn(t *testing.T) {
 	internalChurn(t, true)
-}*/
+}
