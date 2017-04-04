@@ -15,11 +15,11 @@ type RequestVoteMsg struct {
 //It then forwards to the run_server go routine through requestVoteMsgCh. And waits
 //on replyCh before responsed back to the callee server
 func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
-	DPrintf("Serv[%d], Request Vote Enter\n", rf.me)
+	DPrintf("Serv[%d], RequestVote Hdl Enter\n", rf.me)
 	replyCh := make(chan RequestVoteReply)
 	rf.requestVoteMsgCh <- RequestVoteMsg{args, replyCh}
 	*reply = <-replyCh
-	DPrintf("Serv[%d], Request Vote Exit\n", rf.me)
+	DPrintf("Serv[%d], RequestVote Hdl Exit\n", rf.me)
 	return
 }
 
@@ -38,8 +38,10 @@ type AppendEntriesMsg struct {
 //It then forwards to the local "run_server" go routine through appendEntriesMsgCh . And waits
 //on replyCh before responding back to the callee server
 func (rf *Raft) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) {
+	DPrintf("Serv[%d], AppendEntries Hdl Enter\n", rf.me)
 	replyCh := make(chan AppendEntriesReply)
 	rf.appendEntriesMsgCh <- AppendEntriesMsg{args, replyCh}
 	*reply = <-replyCh
+	DPrintf("Serv[%d], AppendEntries Hdl Exit\n", rf.me)
 	return
 }

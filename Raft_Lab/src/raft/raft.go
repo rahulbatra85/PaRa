@@ -48,6 +48,7 @@ const (
 type Raft struct {
 	mu        sync.Mutex
 	stmu      sync.RWMutex
+	applyMu   sync.Mutex
 	peers     []*labrpc.ClientEnd
 	persister *Persister
 	me        int // index into peers[]
@@ -187,6 +188,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyMsgCh = applyCh
 
 	// initialize from persisted state
+	DPrintf("Serv[%d] Starting Raft. Loading Persistent State\n", rf.me)
 	rf.CurrentTerm = 0
 	rf.VotedFor = 0
 	rf.readPersist(r)
@@ -195,8 +197,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		rf.AppendLog(entry)
 	}
 
-	DPrintf("Serv[%d] Starting Raft\n")
-	DPrintf("Serv[%d] Make Term=%d,VotedFor=%d,Log=%v\n", rf.CurrentTerm, rf.VotedFor, rf.Log)
+	DPrintf("Serv[%d] Initial Term=%d,VotedFor=%d,Log=%v\n", rf.me, rf.CurrentTerm, rf.VotedFor, rf.Log)
 
 	//Start Raft Server
 	go rf.run_server()

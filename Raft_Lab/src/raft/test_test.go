@@ -3,10 +3,7 @@ package raft
 //
 // Raft tests.
 //
-// we will use the original test_test.go to test your code for grading.
-// so, while you can modify this code to help you debug, please
-// test with the original before submitting.
-//
+//From MIT 6.824 Course
 
 import "testing"
 import "fmt"
@@ -548,7 +545,7 @@ func TestPersist3(t *testing.T) {
 // haven't been committed yet.
 //
 
-func TestFigure8(t *testing.T) {
+func TestFigure8Reliable(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, false)
 	defer cfg.cleanup()
@@ -559,7 +556,6 @@ func TestFigure8(t *testing.T) {
 
 	nup := servers
 	for iters := 0; iters < 200; iters++ {
-		fmt.Printf("Test: Iteration %d...\n", iters)
 		leader := -1
 		for i := 0; i < servers; i++ {
 			if cfg.rafts[i] != nil {
@@ -789,6 +785,8 @@ func internalChurn(t *testing.T, unreliable bool) {
 	}
 
 	time.Sleep(RaftElectionTimeout)
+
+	fmt.Printf("\t Setting network to reliable\n")
 	cfg.setunreliable(false)
 	for i := 0; i < servers; i++ {
 		if cfg.rafts[i] == nil {
