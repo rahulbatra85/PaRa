@@ -1,13 +1,10 @@
+//Name: config.go
+//Description: This file contains code for testing Raft implementation
+//Author: This file adapted from MIT 6.824 course lab
+
 package raft
 
-//
 // support for Raft tester.
-//
-// we will use the original config.go to test your code for grading.
-// so, while you can modify this code to help you debug, please
-// test with the original before submitting.
-//
-
 import "labrpc"
 import "log"
 import "sync"

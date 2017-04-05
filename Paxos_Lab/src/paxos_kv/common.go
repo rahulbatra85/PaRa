@@ -1,4 +1,8 @@
-package kvpaxos
+//Name: common.go
+//Description: Contains structure common to Key-Value Server and Client
+//Author: Rahul Batra
+
+package paxos_kv
 
 const (
 	OK       = "OK"

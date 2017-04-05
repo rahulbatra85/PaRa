@@ -1,3 +1,7 @@
+//Name: test_test.go
+//Description: Test suite for Paxos implementation
+//Author: Adapted from MIT 6.824 course
+
 package paxos
 
 import "testing"

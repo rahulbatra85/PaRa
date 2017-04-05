@@ -1,3 +1,7 @@
+//Name: raft.go
+//Description: Helper for testing out raft client/server implementation
+//Author: This is adapted from MIT 6.824 course
+
 package raftkv
 
 import "labrpc"
@@ -39,7 +43,7 @@ type config struct {
 	kvservers    []*RaftKV
 	saved        []*raft.Persister
 	endnames     [][]string // names of each server's sending ClientEnds
-	clerks       map[*Clerk][]string
+	clients      map[*RaftClient][]string
 	nextClientId int
 	maxraftstate int
 }
@@ -152,7 +156,7 @@ func (cfg *config) partition(p1 []int, p2 []int) {
 // Create a clerk with clerk specific server names.
 // Give it connections to all of the servers, but for
 // now enable only connections to servers in to[].
-func (cfg *config) makeClient(to []int) *Clerk {
+func (cfg *config) makeClient(to []int) *RaftClient {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 
@@ -165,51 +169,51 @@ func (cfg *config) makeClient(to []int) *Clerk {
 		cfg.net.Connect(endnames[j], j)
 	}
 
-	ck := MakeClerk(random_handles(ends), cfg.nextClientId)
-	cfg.clerks[ck] = endnames
+	ck := MakeRaftClient(random_handles(ends), cfg.nextClientId)
+	cfg.clients[ck] = endnames
 	cfg.nextClientId++
 	cfg.ConnectClientUnlocked(ck, to)
 	return ck
 }
 
-func (cfg *config) deleteClient(ck *Clerk) {
+func (cfg *config) deleteClient(ck *RaftClient) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 
-	v := cfg.clerks[ck]
+	v := cfg.clients[ck]
 	for i := 0; i < len(v); i++ {
 		os.Remove(v[i])
 	}
-	delete(cfg.clerks, ck)
+	delete(cfg.clients, ck)
 }
 
 // caller should hold cfg.mu
-func (cfg *config) ConnectClientUnlocked(ck *Clerk, to []int) {
+func (cfg *config) ConnectClientUnlocked(ck *RaftClient, to []int) {
 	// log.Printf("ConnectClient %v to %v\n", ck, to)
-	endnames := cfg.clerks[ck]
+	endnames := cfg.clients[ck]
 	for j := 0; j < len(to); j++ {
 		s := endnames[to[j]]
 		cfg.net.Enable(s, true)
 	}
 }
 
-func (cfg *config) ConnectClient(ck *Clerk, to []int) {
+func (cfg *config) ConnectClient(ck *RaftClient, to []int) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	cfg.ConnectClientUnlocked(ck, to)
 }
 
 // caller should hold cfg.mu
-func (cfg *config) DisconnectClientUnlocked(ck *Clerk, from []int) {
+func (cfg *config) DisconnectClientUnlocked(ck *RaftClient, from []int) {
 	// log.Printf("DisconnectClient %v from %v\n", ck, from)
-	endnames := cfg.clerks[ck]
+	endnames := cfg.clients[ck]
 	for j := 0; j < len(from); j++ {
 		s := endnames[from[j]]
 		cfg.net.Enable(s, false)
 	}
 }
 
-func (cfg *config) DisconnectClient(ck *Clerk, from []int) {
+func (cfg *config) DisconnectClient(ck *RaftClient, from []int) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	cfg.DisconnectClientUnlocked(ck, from)
@@ -329,7 +333,7 @@ func make_config(t *testing.T, tag string, n int, unreliable bool, maxraftstate 
 	cfg.kvservers = make([]*RaftKV, cfg.n)
 	cfg.saved = make([]*raft.Persister, cfg.n)
 	cfg.endnames = make([][]string, cfg.n)
-	cfg.clerks = make(map[*Clerk][]string)
+	cfg.clients = make(map[*RaftClient][]string)
 	cfg.nextClientId = cfg.n + 1000 // client ids start 1000 above the highest serverid
 	cfg.maxraftstate = maxraftstate
 

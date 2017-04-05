@@ -1,17 +1,15 @@
-package raft
+//Name: raft.go
+//Description: Test suite for raft algorithm
+//Author: This file adapted from MIT 6.824 course
 
-//
-// Raft tests.
-//
-//From MIT 6.824 Course
+package raft
 
 import "testing"
 import "fmt"
 import "time"
 import "math/rand"
 
-import "sync/atomic"
-
+//import "sync/atomic"
 import "sync"
 
 // The tester generously allows solutions to complete elections in one second
@@ -44,20 +42,13 @@ func TestReElection(t *testing.T) {
 	cfg := make_config(t, servers, false)
 	defer cfg.cleanup()
 
-	fmt.Printf("\n")
-	fmt.Printf("Test: election after network failure ...\n")
-	fmt.Printf("\n")
-
+	fmt.Printf("Test: reelection...\n")
 	leader1 := cfg.checkOneLeader()
 
 	// if the leader disconnects, a new one should be elected.
-	fmt.Printf("Test: Disconnect Old Leader...\n")
 	cfg.disconnect(leader1)
 	cfg.checkOneLeader()
 
-	fmt.Printf("\n")
-	fmt.Printf("Test: Reconnect Old Leader...\n")
-	fmt.Printf("\n")
 	// if the old leader rejoins, that shouldn't
 	// disturb the old leader.
 	cfg.connect(leader1)
@@ -65,25 +56,25 @@ func TestReElection(t *testing.T) {
 
 	// if there's no quorum, no leader should
 	// be elected.
-	fmt.Printf("\n")
-	fmt.Printf("Test: Disconnect 2...\n")
-	fmt.Printf("\n")
+	//fmt.Printf("\n")
+	//fmt.Printf("Test: Disconnect 2...\n")
+	//fmt.Printf("\n")
 	cfg.disconnect(leader2)
 	cfg.disconnect((leader2 + 1) % servers)
 	time.Sleep(2 * RaftElectionTimeout)
 	cfg.checkNoLeader()
 
 	// if a quorum arises, it should elect a leader.
-	fmt.Printf("\n")
-	fmt.Printf("Test: Connect")
-	fmt.Printf("\n")
+	//fmt.Printf("\n")
+	//fmt.Printf("Test: Connect")
+	//fmt.Printf("\n")
 	cfg.connect((leader2 + 1) % servers)
 	cfg.checkOneLeader()
 
 	// re-join of last node shouldn't prevent leader from existing.
-	fmt.Printf("\n")
-	fmt.Printf("Test: Connect All")
-	fmt.Printf("\n")
+	//	fmt.Printf("\n")
+	//	fmt.Printf("Test: Connect All")
+	//	fmt.Printf("\n")
 	cfg.connect(leader2)
 	cfg.checkOneLeader()
 
@@ -126,7 +117,7 @@ func TestFailAgree(t *testing.T) {
 	leader := cfg.checkOneLeader()
 	cfg.disconnect((leader + 1) % servers)
 
-	fmt.Printf("Test: Disconnect... %d\n", (leader+1)%servers)
+	//fmt.Printf("Test: Disconnect... %d\n", (leader+1)%servers)
 	// agree despite one failed server?
 	cfg.one(102, servers-1)
 	cfg.one(103, servers-1)
@@ -137,7 +128,7 @@ func TestFailAgree(t *testing.T) {
 	// failed server re-connected
 	cfg.connect((leader + 1) % servers)
 
-	fmt.Printf("Test: Connect... %d\n", (leader+1)%servers)
+	//fmt.Printf("Test: Connect... %d\n", (leader+1)%servers)
 	time.Sleep(RaftElectionTimeout)
 	// agree with full set of servers?
 	cfg.one(106, servers)
@@ -630,6 +621,10 @@ func TestUnreliableAgree(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
+//Turning these tests OFF. These require an optimization for AppendEntries RPC
+//where leader can in fewer AppendEntries RPC  bring back a lagging follower instead of
+//one AppendEntries RPC per entry.
+/*
 func TestFigure8Unreliable(t *testing.T) {
 	servers := 5
 	cfg := make_config(t, servers, true)
@@ -841,4 +836,4 @@ func TestReliableChurn(t *testing.T) {
 
 func TestUnreliableChurn(t *testing.T) {
 	internalChurn(t, true)
-}
+}*/

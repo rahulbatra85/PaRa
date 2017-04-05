@@ -1,21 +1,21 @@
+//Name: raft.go
+//Description: Main file for raft client
+//Author: Rahul Batra
+
 package raftkv
 
 const (
-	OK       = "OK"
-	ErrNoKey = "ErrNoKey"
+	OK         = "OK"
+	ErrNoKey   = "ErrNoKey"
+	OldRequest = "OldRequest"
 )
 
 type Err string
 
-// Put or Append
 type PutAppendArgs struct {
-	// You'll have to add definitions here.
-	Key   string
-	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Key      string
+	Value    string
+	Op       string // "Put" or "Append"
 	ClientId int
 	ReqId    int
 }
@@ -26,8 +26,7 @@ type PutAppendReply struct {
 }
 
 type GetArgs struct {
-	Key string
-	// You'll have to add definitions here.
+	Key      string
 	ClientId int
 	ReqId    int
 }
@@ -38,7 +37,8 @@ type GetReply struct {
 	WrongLeader int
 }
 
-type ClientReply struct {
+type ClientApply struct {
+	ClientId    int
 	ReqId       int
 	WrongLeader int
 	Err         Err

@@ -1,4 +1,8 @@
-package kvpaxos
+//Name: server.go
+//Description: Implements Key-Value Server and contains a local Paxos peer
+//Author: Rahul Batra
+
+package paxos_kv
 
 import "net"
 import "fmt"
@@ -36,7 +40,7 @@ type ApplyMsg struct {
 	Status  paxos.Fate
 }
 
-type KVPaxos struct {
+type PaxosKVServer struct {
 	muKVDB     sync.RWMutex
 	l          net.Listener
 	me         int
@@ -48,7 +52,7 @@ type KVPaxos struct {
 	clientReplyMap map[int]ClientApplied
 }
 
-func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
+func (kv *PaxosKVServer) Get(args *GetArgs, reply *GetReply) error {
 	DPrintf("KVSERVER[%d]: Get Enter. %v\n", kv.me, *args)
 	kv.muKVDB.Lock()
 	defer kv.muKVDB.Unlock()
@@ -125,7 +129,7 @@ func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
 	return nil
 }
 
-func (kv *KVPaxos) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
+func (kv *PaxosKVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	DPrintf("KVSERVER[%d]: PUT Enter %v\n", kv.me, *args)
 
 	kv.muKVDB.Lock()
@@ -202,7 +206,7 @@ func (kv *KVPaxos) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 }
 
 // tell the server to shut itself down.
-func (kv *KVPaxos) kill() {
+func (kv *PaxosKVServer) kill() {
 	DPrintf("Kill(%d): die\n", kv.me)
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.l.Close()
@@ -210,12 +214,12 @@ func (kv *KVPaxos) kill() {
 }
 
 // call this to find out if the server is dead.
-func (kv *KVPaxos) isdead() bool {
+func (kv *PaxosKVServer) isdead() bool {
 	return atomic.LoadInt32(&kv.dead) != 0
 }
 
 //For testing
-func (kv *KVPaxos) setunreliable(what bool) {
+func (kv *PaxosKVServer) setunreliable(what bool) {
 	if what {
 		atomic.StoreInt32(&kv.unreliable, 1)
 	} else {
@@ -223,7 +227,7 @@ func (kv *KVPaxos) setunreliable(what bool) {
 	}
 }
 
-func (kv *KVPaxos) isunreliable() bool {
+func (kv *PaxosKVServer) isunreliable() bool {
 	return atomic.LoadInt32(&kv.unreliable) != 0
 }
 
@@ -233,11 +237,11 @@ func (kv *KVPaxos) isunreliable() bool {
 // form the fault-tolerant key/value service.
 // me is the index of the current server in servers[].
 //
-func StartServer(servers []string, me int) *KVPaxos {
+func StartServer(servers []string, me int) *PaxosKVServer {
 	// Go's RPC library to marshall/unmarshall.
 	gob.Register(Op{})
 
-	kv := new(KVPaxos)
+	kv := new(PaxosKVServer)
 	kv.me = me
 
 	kv.kvdb = make(map[string]string)
@@ -278,7 +282,7 @@ func StartServer(servers []string, me int) *KVPaxos {
 				conn.Close()
 			}
 			if err != nil && kv.isdead() == false {
-				fmt.Printf("KVPaxos(%v) accept: %v\n", me, err.Error())
+				fmt.Printf("PaxosKVServer(%v) accept: %v\n", me, err.Error())
 				kv.kill()
 			}
 		}
@@ -287,7 +291,7 @@ func StartServer(servers []string, me int) *KVPaxos {
 	return kv
 }
 
-func (kv *KVPaxos) GetKVDB(key string) (string, Err) {
+func (kv *PaxosKVServer) GetKVDB(key string) (string, Err) {
 	DPrintf("KVSERVER[%d]: GetKVDB %s\n", kv.me, key)
 	val, ok := kv.kvdb[key]
 	if ok {
@@ -297,17 +301,17 @@ func (kv *KVPaxos) GetKVDB(key string) (string, Err) {
 	}
 }
 
-func (kv *KVPaxos) PutKVDB(key string, value string) {
+func (kv *PaxosKVServer) PutKVDB(key string, value string) {
 	DPrintf("KVSERVER[%d]: PutKVDB %s %s\n", kv.me, key, value)
 	kv.kvdb[key] = value
 }
 
-func (kv *KVPaxos) AppendKVDB(key string, value string) {
+func (kv *PaxosKVServer) AppendKVDB(key string, value string) {
 	DPrintf("KVSERVER[%d]: AppendKVDB %s %s\n", kv.me, key, value)
 	kv.kvdb[key] = kv.kvdb[key] + value
 }
 
-func (kv *KVPaxos) GetClientReplyMap(id int, ReqId int) (ClientApplied, bool) {
+func (kv *PaxosKVServer) GetClientReplyMap(id int, ReqId int) (ClientApplied, bool) {
 	reply, ok := kv.clientReplyMap[id]
 	if ok {
 		return reply, true
@@ -317,12 +321,12 @@ func (kv *KVPaxos) GetClientReplyMap(id int, ReqId int) (ClientApplied, bool) {
 	}
 }
 
-func (kv *KVPaxos) PutClientReplyMap(id int, reply ClientApplied) {
+func (kv *PaxosKVServer) PutClientReplyMap(id int, reply ClientApplied) {
 	DPrintf("KVSERVER[%d]: PutClientReply Id=%d ReqId=%d\n", kv.me, id, reply.ReqID)
 	kv.clientReplyMap[id] = reply
 }
 
-func (kv *KVPaxos) waitPxInstance(seq int) (paxos.Fate, interface{}) {
+func (kv *PaxosKVServer) waitPxInstance(seq int) (paxos.Fate, interface{}) {
 	to := 10 * time.Millisecond
 	for {
 		status, op := kv.px.Status(seq)

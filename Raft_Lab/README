@@ -1,0 +1,33 @@
+1. This code contains implementation of Raft Protocol as described in the paper
+"In Search of an Understandable Consensus Algorithm" by Diego Ongaro and John Ousterhout
+
+2. The implementation is for simulated network where clients and servers are just
+separate go routines inside one process, and communicate using RPCs implemented over go channels.
+Also, the implementation has been tested throughly against the test suite adapted from MIT 6.824 course.
+
+3. Note, that there is not main function. Instead, all the initilization are done through the tester code.
+
+4. The code implements the basic Raft protocol, but not the log compaction or cluster membership changes
+
+4. To run 
+	a) raft peer: 
+		cd raft  
+		go test
+	b) raft peer along with key-value server
+	   cd raft_kv
+	   go test
+
+5. Tests are in test_test.go
+
+6. Folder Structure
+   /raft_kv - contains code for key-value server and clients(application code)
+   /raft - contains code for raft peer
+
+7. To turn on debugging 
+	For raft peer set Debug flag in raft/util.go
+	For key-value server/client in raft_kv/server.go 
+
+
+
+
+

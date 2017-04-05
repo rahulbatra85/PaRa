@@ -1,14 +1,15 @@
+//Name: raft_rpc_handlers.go
+//Description: Contains RPC function that are invoked by the server in response to a RPC call
+//Author: Rahul Batra
+
 package raft
 
-//
 //RequestVoteMsg structure to wrap up an incoming RPC msg
-//
 type RequestVoteMsg struct {
 	args  RequestVoteArgs
 	reply chan RequestVoteReply
 }
 
-//
 // RequestVote RPC handler.
 //
 //This receives an incoming RPC message and packages it into RequestVoteMsg structure.
@@ -23,9 +24,7 @@ func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
 	return
 }
 
-//
 //AppendEntriesMsg structure to wrap up an incoming RPC msg
-//
 type AppendEntriesMsg struct {
 	args  AppendEntriesArgs
 	reply chan AppendEntriesReply

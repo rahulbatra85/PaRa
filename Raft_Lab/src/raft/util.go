@@ -1,19 +1,16 @@
+//Name: raft.go
+//Description: This file defines API to get/set raft persistent state
+//Author: Rahul Batra
+
 package raft
 
 import "fmt"
 
-// Debugging
+//To turn on Debugging set this to 1
 const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug > 1 {
-		fmt.Printf(format, a...)
-	}
-	return
-}
-
-func OnePrintf(format string, a ...interface{}) (n int, err error) {
-	if Debug > 0 {
 		fmt.Printf(format, a...)
 	}
 	return

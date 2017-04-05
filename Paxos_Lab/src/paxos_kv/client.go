@@ -1,29 +1,24 @@
-package kvpaxos
+//Name: client.go
+//Description: Implements Paxos Key-Value Client
+//Author: Rahul Batra
+
+package paxos_kv
 
 import "net/rpc"
-import "crypto/rand"
-import "math/big"
 
 import "fmt"
 
-type Clerk struct {
+type PaxosClient struct {
 	servers []string
 	id      int
 	SeqNum  int
 }
 
-func nrand() int64 {
-	max := big.NewInt(int64(1) << 62)
-	bigx, _ := rand.Int(rand.Reader, max)
-	x := bigx.Int64()
-	return x
-}
-
-func MakeClerk(servers []string, id int) *Clerk {
-	ck := new(Clerk)
-	ck.servers = servers
-	ck.id = id
-	return ck
+func MakePaxosClient(servers []string, id int) *PaxosClient {
+	pc := new(PaxosClient)
+	pc.servers = servers
+	pc.id = id
+	return pc
 }
 
 //
@@ -33,8 +28,7 @@ func MakeClerk(servers []string, id int) *Clerk {
 // to a reply structure.
 //
 // the return value is true if the server responded, and false
-// if call() was not able to contact the server. in particular,
-// the reply's contents are only valid if call() returned true.
+// if call() was not able to contact the server.
 //
 func call(srv string, rpcname string,
 	args interface{}, reply interface{}) bool {
@@ -53,17 +47,15 @@ func call(srv string, rpcname string,
 	return false
 }
 
-//
-// fetch the current value for a key.
-// returns "" if the key does not exist.
-// keeps trying forever in the face of all other errors.
-//
-func (ck *Clerk) Get(key string) string {
-	ck.SeqNum++
+// This function is for the client to obtain the
+// value corresponding to a key. If key doesn't exist
+// then it returns an empty value ""
+func (pc *PaxosClient) Get(key string) string {
+	pc.SeqNum++
 	args := GetArgs{}
 	args.Key = key
-	args.ReqID = ck.SeqNum
-	args.ClientID = ck.id
+	args.ReqID = pc.SeqNum
+	args.ClientID = pc.id
 	reply := &GetReply{}
 
 	done := false
@@ -71,10 +63,10 @@ func (ck *Clerk) Get(key string) string {
 	var retval string
 	for !done {
 		DPrintf("\tTrying GET Request to server[%d].\n", idx)
-		ok := call(ck.servers[idx], "KVPaxos.Get", args, reply)
+		ok := call(pc.servers[idx], "PaxosKVServer.Get", args, reply)
 		if !ok {
 			DPrintf("\tRESP: Request to server[%d] Failed.\n", idx)
-			idx = (idx + 1) % len(ck.servers)
+			idx = (idx + 1) % len(pc.servers)
 		} else {
 			done = true
 			if reply.Err == OK {
@@ -91,27 +83,24 @@ func (ck *Clerk) Get(key string) string {
 	return retval
 }
 
-//
-// shared by Put and Append.
-//
-func (ck *Clerk) PutAppend(key string, value string, op string) {
-	ck.SeqNum++
+func (pc *PaxosClient) PutAppend(key string, value string, op string) {
+	pc.SeqNum++
 	args := PutAppendArgs{}
 	args.Key = key
 	args.Value = value
 	args.Op = op
-	args.ReqID = ck.SeqNum
-	args.ClientID = ck.id
+	args.ReqID = pc.SeqNum
+	args.ClientID = pc.id
 	reply := &PutAppendReply{}
 
 	done := false
 	idx := 0
 	for !done {
 		DPrintf("\tTrying PUT Request to server[%d].\n", idx)
-		ok := call(ck.servers[idx], "KVPaxos.PutAppend", args, reply)
+		ok := call(pc.servers[idx], "PaxosKVServer.PutAppend", args, reply)
 		if !ok {
 			DPrintf("\tRESP: Request to server[%d] Failed.\n", idx)
-			idx = (idx + 1) % len(ck.servers)
+			idx = (idx + 1) % len(pc.servers)
 		} else {
 			done = true
 			DPrintf("\tRESP: Request Successful\n")
@@ -119,10 +108,14 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	}
 }
 
-func (ck *Clerk) Put(key string, value string) {
-	ck.PutAppend(key, value, "Put")
+// This function is for the client to put a value
+// corresponding to a key.
+func (pc *PaxosClient) Put(key string, value string) {
+	pc.PutAppend(key, value, "Put")
 }
 
-func (ck *Clerk) Append(key string, value string) {
-	ck.PutAppend(key, value, "Append")
+// This function is for the client to append a value
+// corresponding to a key.
+func (pc *PaxosClient) Append(key string, value string) {
+	pc.PutAppend(key, value, "Append")
 }

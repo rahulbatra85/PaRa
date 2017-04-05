@@ -1,21 +1,8 @@
-package raft
+//Name: raft.go
+//Description: Main file for raft server
+//Author: Rahul Batra(except empty functions adapted from MIT 6.824 course)
 
-//
-// this is an outline of the API that raft must expose to
-// the service (or tester). see comments below for
-// each of these functions for more details.
-//
-// rf = Make(...)
-//   create a new Raft server.
-// rf.Start(command interface{}) (index, term, isleader)
-//   start agreement on a new log entry
-// rf.GetState() (term, isLeader)
-//   ask a Raft for its current term, and whether it thinks it is leader
-// ApplyMsg
-//   each time a new entry is committed to the log, each Raft peer
-//   should send an ApplyMsg to the service (or tester)
-//   in the same server.
-//
+package raft
 
 import "sync"
 import "labrpc"
@@ -30,8 +17,8 @@ import "encoding/gob"
 type ApplyMsg struct {
 	Index       int
 	Command     interface{}
-	UseSnapshot bool   // ignore for lab2; only used in lab3
-	Snapshot    []byte // ignore for lab2; only used in lab3
+	UseSnapshot bool
+	Snapshot    []byte
 }
 
 type RaftState int

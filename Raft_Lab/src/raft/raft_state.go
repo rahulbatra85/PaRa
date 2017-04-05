@@ -1,6 +1,8 @@
-package raft
+//Name: raft.go
+//Description: This file defines API to get/set raft persistent state
+//Author: Rahul Batra
 
-//This file defines API to get/set raft persistent state
+package raft
 
 func (rf *Raft) getCurrentTerm() int {
 	rf.stmu.RLock()

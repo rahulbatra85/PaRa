@@ -1,3 +1,8 @@
+//Name: raft_server.go
+//Description: This file contains code which implements the main
+//raft algorithm
+//Author: Rahul Batra
+
 package raft
 
 import (
@@ -12,9 +17,7 @@ type ElectionResultMsg struct {
 	term   int
 }
 
-//
 //Main raft_server go routine
-//
 func (rf *Raft) run_server() {
 	DPrintf("Serv[%d], Server Starting\n", rf.me)
 
@@ -41,10 +44,8 @@ func (rf *Raft) run_server() {
 	}
 }
 
-//
 //This functions handles RPCs and other actions when raft server
 //is in FOLLOWER state
-//
 func (rf *Raft) do_follower() (nextState RaftState) {
 	DPrintf("Serv[%d], Follower State Enter\n", rf.me)
 	rcvAppendEntries := false
@@ -75,10 +76,8 @@ func (rf *Raft) do_follower() (nextState RaftState) {
 	}
 }
 
-//
 //This functions handles RPCs and other actions when raft server
 //is in CANDIDATE state
-//
 func (rf *Raft) do_candidate() (nextState RaftState) {
 	DPrintf("Serv[%d], Candidate State Enter\n", rf.me)
 	rf.setCurrentTerm(rf.getCurrentTerm() + 1)
@@ -117,10 +116,8 @@ func (rf *Raft) do_candidate() (nextState RaftState) {
 	}
 }
 
-//
 //This functions handles RPCs and other actions when raft server
 //is in LEADER state
-//
 func (rf *Raft) do_leader() (nextState RaftState) {
 	DPrintf("Serv[%d], Leader State Enter. Term=%d\n", rf.me, rf.getCurrentTerm())
 	for p := 0; p < len(rf.peers); p++ {
@@ -143,7 +140,7 @@ func (rf *Raft) do_leader() (nextState RaftState) {
 				return FOLLOWER
 			}
 		case <-rf.appendEntriesReplyCh:
-			//\TODO
+			//Do nothing
 		case <-rf.requestVoteReplyCh:
 			//Do nothing
 		case <-rf.makeHeartbeatTimeout():
@@ -171,10 +168,8 @@ func (rf *Raft) do_leader() (nextState RaftState) {
 	}
 }
 
-//
 //In separate go routine for each peer, it sends RequestVote RPC to a peer,
 //waits for the response and then forwards it to the server main-loop
-//
 func (rf *Raft) requestVotes() {
 	DPrintf("Serv[%d], Starting Election\n", rf.me)
 	args := RequestVoteArgs{}
@@ -196,11 +191,7 @@ func (rf *Raft) requestVotes() {
 	return
 }
 
-//
-//This function is called by the leader to sendHeartbeats.
-//If a follower is up to date, then it simply send appendEntries
-//with no entries(empty). Otherwise, it sends the follower the
-//newer entries
+//Leader uses this function to send AppendEntries RPC(heartbeat if no entries)
 func (rf *Raft) sendHeartBeats() (fallBack, sentToMajority bool) {
 	rf.applyMu.Lock()
 	defer rf.applyMu.Unlock()
@@ -264,7 +255,7 @@ func (rf *Raft) sendHeartBeats() (fallBack, sentToMajority bool) {
 	return fallBack, sentToMajority
 }
 
-// This function creates timer channel with random timeout.
+//This function creates timer channel with random timeout.
 func (rf *Raft) makeElectionTimeout() <-chan time.Time {
 	return time.After(time.Duration(((rand.Int() % rf.electionTimeout) + rf.electionTimeout)) * time.Millisecond)
 }
@@ -279,9 +270,7 @@ func (rf *Raft) makeUpdateSMPeriod() <-chan time.Time {
 	return time.After(time.Duration(10) * time.Millisecond)
 }
 
-//
 //This function handles AppendEntries RPC as per the description in raft paper
-//
 func (rf *Raft) handleAppendEntries(msg AppendEntriesMsg) bool {
 	rf.applyMu.Lock()
 	defer rf.applyMu.Unlock()
@@ -359,9 +348,7 @@ func (rf *Raft) handleAppendEntries(msg AppendEntriesMsg) bool {
 	return retVal
 }
 
-//
 //handleRequestVote
-//
 func (rf *Raft) handleRequestVote(msg RequestVoteMsg) {
 	rf.applyMu.Lock()
 	defer rf.applyMu.Unlock()
@@ -399,10 +386,8 @@ func (rf *Raft) handleRequestVote(msg RequestVoteMsg) {
 	DPrintf("Serv[%d], HandlerRequestVote Exit. Granted=%v\n", rf.me, reply.VoteGranted)
 }
 
-//
 //This function is called when RequestVote is received when a node is
 // in candidate or leader state
-//
 func (rf *Raft) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	rf.applyMu.Lock()
 	defer rf.applyMu.Unlock()
@@ -447,14 +432,12 @@ func (rf *Raft) handleCandidateOrLeaderRequestVote(msg RequestVoteMsg) bool {
 	return retVal
 }
 
-//
 //This routine wakes up periodically to apply any committed entries in the log
-//
 func (rf *Raft) UpdateSM() {
 	for {
 		select {
 		case <-rf.makeUpdateSMPeriod():
-			rf.applyMu.Lock()
+			//rf.applyMu.Lock()
 			cmtIdx := (int)(atomic.LoadInt64(&rf.commitIndex))
 			DPrintf("Serv[%d]: UpdateSM CmtIdx=%d, LastApp: %d\n", rf.me, cmtIdx, rf.lastApplied)
 
@@ -465,16 +448,14 @@ func (rf *Raft) UpdateSM() {
 				DPrintf("Serv[%d]: UpdateSM  LastApplied: %d\n", rf.me, rf.lastApplied)
 				rf.applyMsgCh <- ApplyMsg{Index: rf.lastApplied, Command: cmd}
 			}
-			rf.applyMu.Unlock()
+			//rf.applyMu.Unlock()
 		}
 	}
 }
 
-//
 //This function is called when node is leader.
 //It updates commit index on the leader node as per the description
 //in raft paper
-//
 func (rf *Raft) UpdateCommitIdx() {
 	//Commit any Entries that have been replicated on majority of peers
 	//Find 'n+1' highest including from leader
@@ -492,7 +473,7 @@ func (rf *Raft) UpdateCommitIdx() {
 			N = mIdx[n]
 		}
 	}
-	DPrintf("Serv[%d]: CommitIdx Calc: N=%d, mIdx=%v\n", rf.me, N, mIdx)
+	DPrintf("Serv[%d]: CommitIdx Calc: N=%d, mIdx=%v, term=%d,LogN.term=%d,cmtIdx=%d\n", rf.me, N, mIdx, rf.CurrentTerm, rf.Log[N].Term, rf.commitIndex)
 	if (rf.Log[N].Term == rf.CurrentTerm) && int(rf.commitIndex) < N {
 		atomic.StoreInt64(&rf.commitIndex, int64(N))
 		DPrintf("Serv[%d]: Updated Updt CommitIdx: %d\n", rf.me, rf.commitIndex)

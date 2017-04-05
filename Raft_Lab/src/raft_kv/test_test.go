@@ -1,3 +1,7 @@
+//Name: raft.go
+//Description: Test suite for raft client/server implementation
+//Author: This is adapted from MIT 6.824 course
+
 package raftkv
 
 import "testing"
@@ -13,25 +17,25 @@ import "sync/atomic"
 // (much more than the paper's range of timeouts).
 const electionTimeout = 5 * time.Second
 
-func check(t *testing.T, ck *Clerk, key string, value string) {
-	v := ck.Get(key)
+func check(t *testing.T, rc *RaftClient, key string, value string) {
+	v := rc.Get(key)
 	if v != value {
 		t.Fatalf("Get(%v): expected:\n%v\nreceived:\n%v", key, value, v)
 	}
 }
 
 // a client runs the function f and then signals it is done
-func run_client(t *testing.T, cfg *config, me int, ca chan bool, fn func(me int, ck *Clerk, t *testing.T)) {
+func run_client(t *testing.T, cfg *config, me int, ca chan bool, fn func(me int, rc *RaftClient, t *testing.T)) {
 	ok := false
 	defer func() { ca <- ok }()
-	ck := cfg.makeClient(cfg.All())
-	fn(me, ck, t)
+	rc := cfg.makeClient(cfg.All())
+	fn(me, rc, t)
 	ok = true
-	cfg.deleteClient(ck)
+	cfg.deleteClient(rc)
 }
 
 // spawn ncli clients and wait until they are all done
-func spawn_clients_and_wait(t *testing.T, cfg *config, ncli int, fn func(me int, ck *Clerk, t *testing.T)) {
+func spawn_clients_and_wait(t *testing.T, cfg *config, ncli int, fn func(me int, rc *RaftClient, t *testing.T)) {
 	ca := make([]chan bool, ncli)
 	for cli := 0; cli < ncli; cli++ {
 		ca[cli] = make(chan bool)
@@ -133,7 +137,7 @@ func GenericTest(t *testing.T, tag string, nclients int, unreliable bool, crash 
 	cfg := make_config(t, tag, nservers, unreliable, maxraftstate)
 	defer cfg.cleanup()
 
-	ck := cfg.makeClient(cfg.All())
+	rc := cfg.makeClient(cfg.All())
 
 	done_partitioner := int32(0)
 	done_clients := int32(0)
@@ -143,10 +147,10 @@ func GenericTest(t *testing.T, tag string, nclients int, unreliable bool, crash 
 		clnts[i] = make(chan int)
 	}
 	for i := 0; i < 3; i++ {
-		// log.Printf("Iteration %v\n", i)
+		//log.Printf("Iteration %v\n", i)
 		atomic.StoreInt32(&done_clients, 0)
 		atomic.StoreInt32(&done_partitioner, 0)
-		go spawn_clients_and_wait(t, cfg, nclients, func(cli int, myck *Clerk, t *testing.T) {
+		go spawn_clients_and_wait(t, cfg, nclients, func(cli int, myck *RaftClient, t *testing.T) {
 			j := 0
 			defer func() {
 				clnts[cli] <- j
@@ -182,7 +186,7 @@ func GenericTest(t *testing.T, tag string, nclients int, unreliable bool, crash 
 		atomic.StoreInt32(&done_partitioner, 1) // tell partitioner to quit
 
 		if partitions {
-			// log.Printf("wait for partitioner\n")
+			//log.Printf("wait for partitioner\n")
 			<-ch_partitioner
 			// reconnect network and submit a request. A client may
 			// have submitted a request in a minority.  That request
@@ -209,16 +213,16 @@ func GenericTest(t *testing.T, tag string, nclients int, unreliable bool, crash 
 			cfg.ConnectAll()
 		}
 
-		// log.Printf("wait for clients\n")
+		//log.Printf("wait for clients\n")
 		for i := 0; i < nclients; i++ {
-			// log.Printf("read from clients %d\n", i)
+			//log.Printf("read from clients %d\n", i)
 			j := <-clnts[i]
 			if j < 10 {
-				log.Printf("Warning: client %d managed to perform only %d put operations in 1 sec?\n", i, j)
+				//log.Printf("Warning: client %d managed to perform only %d put operations in 1 sec?\n", i, j)
 			}
 			key := strconv.Itoa(i)
 			// log.Printf("Check %v for client %d\n", j, i)
-			v := ck.Get(key)
+			v := rc.Get(key)
 			checkClntAppends(t, i, v, j)
 		}
 
@@ -254,15 +258,15 @@ func TestUnreliableOneKey(t *testing.T) {
 	cfg := make_config(t, "onekey", nservers, true, -1)
 	defer cfg.cleanup()
 
-	ck := cfg.makeClient(cfg.All())
+	rc := cfg.makeClient(cfg.All())
 
 	fmt.Printf("Test: Concurrent Append to same key, unreliable ...\n")
 
-	ck.Put("k", "")
+	rc.Put("k", "")
 
 	const nclient = 5
 	const upto = 10
-	spawn_clients_and_wait(t, cfg, nclient, func(me int, myck *Clerk, t *testing.T) {
+	spawn_clients_and_wait(t, cfg, nclient, func(me int, myck *RaftClient, t *testing.T) {
 		n := 0
 		for n < upto {
 			myck.Append("k", "x "+strconv.Itoa(me)+" "+strconv.Itoa(n)+" y")
@@ -275,7 +279,7 @@ func TestUnreliableOneKey(t *testing.T) {
 		counts = append(counts, upto)
 	}
 
-	vx := ck.Get("k")
+	vx := rc.Get("k")
 	checkConcurrentAppends(t, vx, counts)
 
 	fmt.Printf("  ... Passed\n")
@@ -288,9 +292,9 @@ func TestOnePartition(t *testing.T) {
 	const nservers = 5
 	cfg := make_config(t, "partition", nservers, false, -1)
 	defer cfg.cleanup()
-	ck := cfg.makeClient(cfg.All())
+	rc := cfg.makeClient(cfg.All())
 
-	ck.Put("1", "13")
+	rc.Put("1", "13")
 
 	fmt.Printf("Test: Progress in majority ...\n")
 
@@ -354,7 +358,7 @@ func TestOnePartition(t *testing.T) {
 	default:
 	}
 
-	check(t, ck, "1", "15")
+	check(t, rc, "1", "15")
 
 	fmt.Printf("  ... Passed\n")
 }
@@ -408,12 +412,12 @@ func TestSnapshotRPC(t *testing.T) {
 	cfg := make_config(t, "snapshotrpc", nservers, false, maxraftstate)
 	defer cfg.cleanup()
 
-	ck := cfg.makeClient(cfg.All())
+	rc := cfg.makeClient(cfg.All())
 
 	fmt.Printf("Test: InstallSnapshot RPC ...\n")
 
-	ck.Put("a", "A")
-	check(t, ck, "a", "A")
+	rc.Put("a", "A")
+	check(t, rc, "a", "A")
 
 	// a bunch of puts into the majority partition.
 	cfg.partition([]int{0, 1}, []int{2})
@@ -448,10 +452,10 @@ func TestSnapshotRPC(t *testing.T) {
 	// now everybody
 	cfg.partition([]int{0, 1, 2}, []int{})
 
-	ck.Put("e", "E")
-	check(t, ck, "c", "C")
-	check(t, ck, "e", "E")
-	check(t, ck, "1", "1")
+	rc.Put("e", "E")
+	check(t, rc, "c", "C")
+	check(t, rc, "e", "E")
+	check(t, rc, "1", "1")
 
 	fmt.Printf("  ... Passed\n")
 }

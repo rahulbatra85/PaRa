@@ -1,8 +1,10 @@
+//Name: raft_rpc.go
+//Description: Contains RPC function that are called by the RPC client
+//Author: Rahul Batra
+
 package raft
 
-//
-// RequestVote RPC arguments structure.
-//
+//RequestVote RPC arguments structure.
 type RequestVoteArgs struct {
 	Term        int
 	CandidateId int
@@ -10,17 +12,13 @@ type RequestVoteArgs struct {
 	LastLogTerm int
 }
 
-//
-// RequestVote RPC reply structure.
-//
+//RequestVote RPC reply structure.
 type RequestVoteReply struct {
 	Term        int
 	VoteGranted bool
 }
 
-//
 //Raft RPC API for sendRequestVote
-//
 func (rf *Raft) sendRequestVote(server int, args RequestVoteArgs, reply *RequestVoteReply) bool {
 	DPrintf("Serv[%d], SendRequestVote to %d\n", rf.me, server)
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
@@ -28,9 +26,7 @@ func (rf *Raft) sendRequestVote(server int, args RequestVoteArgs, reply *Request
 	return ok
 }
 
-//
-// Append Entries RPC arguments structure
-//
+//Append Entries RPC arguments structure
 type AppendEntriesArgs struct {
 	Term         int
 	LeaderId     int
@@ -40,17 +36,13 @@ type AppendEntriesArgs struct {
 	LeaderCommit int
 }
 
-//
-//  AppendEntries RPC reply structure
-//
+//AppendEntries RPC reply structure
 type AppendEntriesReply struct {
 	Term    int
 	Success bool
 }
 
-//
 //Raft RPC API for appendEntries
-//
 func (rf *Raft) sendAppendEntries(server int, args AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	DPrintf("Serv[%d], SendAppendEntries to %d\n", rf.me, server)
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)

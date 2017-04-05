@@ -1,8 +1,8 @@
-package raft
+//Name: log.go
+//Description: Contains code pertaining to raft log
+//Author: Rahul Batra
 
-//
-//Contains code pertaining to raft log
-//
+package raft
 
 //
 //Raft Log Entry

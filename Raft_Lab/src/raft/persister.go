@@ -1,9 +1,9 @@
-package raft
+//Name: persister.go
+//Description : support for Raft and kvraft to save persistent
+//  			Raft state (log &c) and k/v server snapshots.
+//Author: This file adapted from  MIT 6.824 course
 
-//
-// support for Raft and kvraft to save persistent
-// Raft state (log &c) and k/v server snapshots.
-//
+package raft
 
 import "sync"
 

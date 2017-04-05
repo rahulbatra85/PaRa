@@ -1,4 +1,8 @@
-package kvpaxos
+//Name: test_test.go
+//Description: Test suite for Paxos implementation
+//Author: Adapted from MIT 6.824 course
+
+package paxos_kv
 
 import "testing"
 import "runtime"
@@ -10,8 +14,8 @@ import "math/rand"
 import "strings"
 import "sync/atomic"
 
-func check(t *testing.T, ck *Clerk, key string, value string) {
-	v := ck.Get(key)
+func check(t *testing.T, pc *PaxosClient, key string, value string) {
+	v := pc.Get(key)
 	if v != value {
 		t.Fatalf("Get(%v) -> %v, expected %v", key, v, value)
 	}
@@ -28,7 +32,7 @@ func port(tag string, host int) string {
 	return s
 }
 
-func cleanup(kva []*KVPaxos) {
+func cleanup(kva []*PaxosKVServer) {
 	for i := 0; i < len(kva); i++ {
 		if kva[i] != nil {
 			kva[i].kill()
@@ -52,7 +56,7 @@ func TestBasic(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
 	const nservers = 3
-	var kva []*KVPaxos = make([]*KVPaxos, nservers)
+	var kva []*PaxosKVServer = make([]*PaxosKVServer, nservers)
 	var kvh []string = make([]string, nservers)
 	defer cleanup(kva)
 
@@ -63,26 +67,26 @@ func TestBasic(t *testing.T) {
 		kva[i] = StartServer(kvh, i)
 	}
 
-	ck := MakeClerk(kvh, NextClientId())
-	var cka [nservers]*Clerk
+	pc := MakePaxosClient(kvh, NextClientId())
+	var pca [nservers]*PaxosClient
 	for i := 0; i < nservers; i++ {
-		cka[i] = MakeClerk([]string{kvh[i]}, NextClientId())
+		pca[i] = MakePaxosClient([]string{kvh[i]}, NextClientId())
 	}
 
 	fmt.Printf("Test: Basic put/append/get ...\n")
 
-	ck.Append("app", "x")
-	ck.Append("app", "y")
-	check(t, ck, "app", "xy")
+	pc.Append("app", "x")
+	pc.Append("app", "y")
+	check(t, pc, "app", "xy")
 
-	ck.Put("a", "aa")
-	check(t, ck, "a", "aa")
+	pc.Put("a", "aa")
+	check(t, pc, "a", "aa")
 
-	cka[1].Put("a", "aaa")
+	pca[1].Put("a", "aaa")
 
-	check(t, cka[2], "a", "aaa")
-	check(t, cka[1], "a", "aaa")
-	check(t, ck, "a", "aaa")
+	check(t, pca[2], "a", "aaa")
+	check(t, pca[1], "a", "aaa")
+	check(t, pc, "a", "aaa")
 
 	fmt.Printf("  ... Passed\n")
 
@@ -96,11 +100,11 @@ func TestBasic(t *testing.T) {
 			go func(me int) {
 				defer func() { ca[me] <- true }()
 				ci := (rand.Int() % nservers)
-				myck := MakeClerk([]string{kvh[ci]}, NextClientId())
+				mypc := MakePaxosClient([]string{kvh[ci]}, NextClientId())
 				if (rand.Int() % 1000) < 500 {
-					myck.Put("b", strconv.Itoa(rand.Int()))
+					mypc.Put("b", strconv.Itoa(rand.Int()))
 				} else {
-					myck.Get("b")
+					mypc.Get("b")
 				}
 			}(nth)
 		}
@@ -109,7 +113,7 @@ func TestBasic(t *testing.T) {
 		}
 		var va [nservers]string
 		for i := 0; i < nservers; i++ {
-			va[i] = cka[i].Get("b")
+			va[i] = pca[i].Get("b")
 			if va[i] != va[0] {
 				t.Fatalf("mismatch")
 			}
@@ -125,7 +129,7 @@ func TestDone(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
 	const nservers = 3
-	var kva []*KVPaxos = make([]*KVPaxos, nservers)
+	var kva []*PaxosKVServer = make([]*PaxosKVServer, nservers)
 	var kvh []string = make([]string, nservers)
 	defer cleanup(kva)
 
@@ -135,16 +139,16 @@ func TestDone(t *testing.T) {
 	for i := 0; i < nservers; i++ {
 		kva[i] = StartServer(kvh, i)
 	}
-	ck := MakeClerk(kvh, NextClientId())
-	var cka [nservers]*Clerk
+	pc := MakePaxosClient(kvh, NextClientId())
+	var pca [nservers]*PaxosClient
 	for pi := 0; pi < nservers; pi++ {
-		cka[pi] = MakeClerk([]string{kvh[pi]}, NextClientId())
+		pca[pi] = MakePaxosClient([]string{kvh[pi]}, NextClientId())
 	}
 
 	fmt.Printf("Test: server frees Paxos log memory...\n")
 
-	ck.Put("a", "aa")
-	check(t, ck, "a", "aa")
+	pc.Put("a", "aa")
+	check(t, pc, "a", "aa")
 
 	runtime.GC()
 	var m0 runtime.MemStats
@@ -161,8 +165,8 @@ func TestDone(t *testing.T) {
 			for j := 0; j < len(value); j++ {
 				value[j] = byte((rand.Int() % 100) + 1)
 			}
-			ck.Put(key, string(value))
-			check(t, cka[i%nservers], key, string(value))
+			pc.Put(key, string(value))
+			check(t, pca[i%nservers], key, string(value))
 		}
 	}
 
@@ -171,8 +175,8 @@ func TestDone(t *testing.T) {
 	// the Paxos proposer messages.
 	for iters := 0; iters < 2; iters++ {
 		for pi := 0; pi < nservers; pi++ {
-			cka[pi].Put("a", "aa")
-			check(t, cka[pi], "a", "aa")
+			pca[pi].Put("a", "aa")
+			check(t, pca[pi], "a", "aa")
 		}
 	}
 
@@ -236,7 +240,7 @@ func TestPartition(t *testing.T) {
 
 	tag := "partition"
 	const nservers = 5
-	var kva []*KVPaxos = make([]*KVPaxos, nservers)
+	var kva []*PaxosKVServer = make([]*PaxosKVServer, nservers)
 	defer cleanup(kva)
 	defer cleanpp(tag, nservers)
 
@@ -253,25 +257,25 @@ func TestPartition(t *testing.T) {
 	}
 	defer part(t, tag, nservers, []int{}, []int{}, []int{})
 
-	var cka [nservers]*Clerk
+	var pca [nservers]*PaxosClient
 	for i := 0; i < nservers; i++ {
-		cka[i] = MakeClerk([]string{port(tag, i)}, NextClientId())
+		pca[i] = MakePaxosClient([]string{port(tag, i)}, NextClientId())
 	}
 
 	fmt.Printf("Test: No partition ...\n")
 
 	part(t, tag, nservers, []int{0, 1, 2, 3, 4}, []int{}, []int{})
-	cka[0].Put("1", "12")
-	cka[2].Put("1", "13")
-	check(t, cka[3], "1", "13")
+	pca[0].Put("1", "12")
+	pca[2].Put("1", "13")
+	check(t, pca[3], "1", "13")
 
 	fmt.Printf("  ... Passed\n")
 
 	fmt.Printf("Test: Progress in majority ...\n")
 
 	part(t, tag, nservers, []int{2, 3, 4}, []int{0, 1}, []int{})
-	cka[2].Put("1", "14")
-	check(t, cka[4], "1", "14")
+	pca[2].Put("1", "14")
+	check(t, pca[4], "1", "14")
 
 	fmt.Printf("  ... Passed\n")
 
@@ -280,11 +284,11 @@ func TestPartition(t *testing.T) {
 	done0 := make(chan bool)
 	done1 := make(chan bool)
 	go func() {
-		cka[0].Put("1", "15")
+		pca[0].Put("1", "15")
 		done0 <- true
 	}()
 	go func() {
-		cka[1].Get("1")
+		pca[1].Get("1")
 		done1 <- true
 	}()
 
@@ -296,9 +300,9 @@ func TestPartition(t *testing.T) {
 	case <-time.After(time.Second):
 	}
 
-	check(t, cka[4], "1", "14")
-	cka[3].Put("1", "16")
-	check(t, cka[4], "1", "16")
+	check(t, pca[4], "1", "14")
+	pca[3].Put("1", "16")
+	check(t, pca[4], "1", "16")
 
 	fmt.Printf("  ... Passed\n")
 
@@ -318,8 +322,8 @@ func TestPartition(t *testing.T) {
 	default:
 	}
 
-	check(t, cka[4], "1", "15")
-	check(t, cka[0], "1", "15")
+	check(t, pca[4], "1", "15")
+	check(t, pca[0], "1", "15")
 
 	part(t, tag, nservers, []int{0, 1, 2}, []int{3, 4}, []int{})
 
@@ -329,19 +333,19 @@ func TestPartition(t *testing.T) {
 		t.Fatalf("Get did not complete")
 	}
 
-	check(t, cka[1], "1", "15")
+	check(t, pca[1], "1", "15")
 
 	fmt.Printf("  ... Passed\n")
 }
 
-func randclerk(kvh []string) *Clerk {
+func randclerk(kvh []string) *PaxosClient {
 	sa := make([]string, len(kvh))
 	copy(sa, kvh)
 	for i := range sa {
 		j := rand.Intn(i + 1)
 		sa[i], sa[j] = sa[j], sa[i]
 	}
-	return MakeClerk(sa, NextClientId())
+	return MakePaxosClient(sa, NextClientId())
 }
 
 // check that all known appends are present in a value,
@@ -372,7 +376,7 @@ func TestUnreliable(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
 	const nservers = 3
-	var kva []*KVPaxos = make([]*KVPaxos, nservers)
+	var kva []*PaxosKVServer = make([]*PaxosKVServer, nservers)
 	var kvh []string = make([]string, nservers)
 	defer cleanup(kva)
 
@@ -384,22 +388,22 @@ func TestUnreliable(t *testing.T) {
 		kva[i].setunreliable(true)
 	}
 
-	ck := MakeClerk(kvh, NextClientId())
-	var cka [nservers]*Clerk
+	pc := MakePaxosClient(kvh, NextClientId())
+	var pca [nservers]*PaxosClient
 	for i := 0; i < nservers; i++ {
-		cka[i] = MakeClerk([]string{kvh[i]}, NextClientId())
+		pca[i] = MakePaxosClient([]string{kvh[i]}, NextClientId())
 	}
 
 	fmt.Printf("Test: Basic put/get, unreliable ...\n")
 
-	ck.Put("a", "aa")
-	check(t, ck, "a", "aa")
+	pc.Put("a", "aa")
+	check(t, pc, "a", "aa")
 
-	cka[1].Put("a", "aaa")
+	pca[1].Put("a", "aaa")
 
-	check(t, cka[2], "a", "aaa")
-	check(t, cka[1], "a", "aaa")
-	check(t, ck, "a", "aaa")
+	check(t, pca[2], "a", "aaa")
+	check(t, pca[1], "a", "aaa")
+	check(t, pc, "a", "aaa")
 
 	fmt.Printf("  ... Passed\n")
 
@@ -413,21 +417,21 @@ func TestUnreliable(t *testing.T) {
 			go func(me int) {
 				ok := false
 				defer func() { ca[me] <- ok }()
-				myck := randclerk(kvh)
+				mypc := randclerk(kvh)
 				key := strconv.Itoa(me)
-				vv := myck.Get(key)
-				myck.Append(key, "0")
+				vv := mypc.Get(key)
+				mypc.Append(key, "0")
 				vv = NextValue(vv, "0")
-				myck.Append(key, "1")
+				mypc.Append(key, "1")
 				vv = NextValue(vv, "1")
-				myck.Append(key, "2")
+				mypc.Append(key, "2")
 				vv = NextValue(vv, "2")
 				time.Sleep(100 * time.Millisecond)
-				s := myck.Get(key)
+				s := mypc.Get(key)
 				if s != vv {
 					t.Fatalf("wrong value. Key=%s Got=%s Wanted=%s\n", key, s, vv)
 				}
-				s = myck.Get(key)
+				s = mypc.Get(key)
 				if s != vv {
 					t.Fatalf("wrong value. Key=%s Got=%s Wanted=%s\n", key, s, vv)
 				}
@@ -453,11 +457,11 @@ func TestUnreliable(t *testing.T) {
 			ca[cli] = make(chan bool)
 			go func(me int) {
 				defer func() { ca[me] <- true }()
-				myck := randclerk(kvh)
+				mypc := randclerk(kvh)
 				if (rand.Int() % 1000) < 500 {
-					myck.Put("b", strconv.Itoa(rand.Int()))
+					mypc.Put("b", strconv.Itoa(rand.Int()))
 				} else {
-					myck.Get("b")
+					mypc.Get("b")
 				}
 			}(cli)
 		}
@@ -467,7 +471,7 @@ func TestUnreliable(t *testing.T) {
 
 		var va [nservers]string
 		for i := 0; i < nservers; i++ {
-			va[i] = cka[i].Get("b")
+			va[i] = pca[i].Get("b")
 			if va[i] != va[0] {
 				t.Fatalf("mismatch; 0 got %v, %v got %v", va[0], i, va[i])
 			}
@@ -478,15 +482,15 @@ func TestUnreliable(t *testing.T) {
 
 	fmt.Printf("Test: Concurrent Append to same key, unreliable ...\n")
 
-	ck.Put("k", "")
+	pc.Put("k", "")
 
 	ff := func(me int, ch chan int) {
 		ret := -1
 		defer func() { ch <- ret }()
-		myck := randclerk(kvh)
+		mypc := randclerk(kvh)
 		n := 0
 		for n < 5 {
-			myck.Append("k", "x "+strconv.Itoa(me)+" "+strconv.Itoa(n)+" y")
+			mypc.Append("k", "x "+strconv.Itoa(me)+" "+strconv.Itoa(n)+" y")
 			n++
 		}
 		ret = n
@@ -508,12 +512,12 @@ func TestUnreliable(t *testing.T) {
 		counts = append(counts, n)
 	}
 
-	vx := ck.Get("k")
+	vx := pc.Get("k")
 	checkAppends(t, vx, counts)
 
 	{
 		for i := 0; i < nservers; i++ {
-			vi := cka[i].Get("k")
+			vi := pca[i].Get("k")
 			if vi != vx {
 				t.Fatalf("mismatch; 0 got %v, %v got %v", vx, i, vi)
 			}
@@ -525,97 +529,6 @@ func TestUnreliable(t *testing.T) {
 	time.Sleep(1 * time.Second)
 }
 
-func TestHole(t *testing.T) {
-	runtime.GOMAXPROCS(4)
-
-	fmt.Printf("Test: Tolerates holes in paxos sequence ...\n")
-
-	tag := "hole"
-	const nservers = 5
-	var kva []*KVPaxos = make([]*KVPaxos, nservers)
-	defer cleanup(kva)
-	defer cleanpp(tag, nservers)
-
-	for i := 0; i < nservers; i++ {
-		var kvh []string = make([]string, nservers)
-		for j := 0; j < nservers; j++ {
-			if j == i {
-				kvh[j] = port(tag, i)
-			} else {
-				kvh[j] = pp(tag, i, j)
-			}
-		}
-		kva[i] = StartServer(kvh, i)
-	}
-	defer part(t, tag, nservers, []int{}, []int{}, []int{})
-
-	for iters := 0; iters < 5; iters++ {
-		part(t, tag, nservers, []int{0, 1, 2, 3, 4}, []int{}, []int{})
-
-		ck2 := MakeClerk([]string{port(tag, 2)}, NextClientId())
-		ck2.Put("q", "q")
-
-		done := int32(0)
-		const nclients = 10
-		var ca [nclients]chan bool
-		for xcli := 0; xcli < nclients; xcli++ {
-			ca[xcli] = make(chan bool)
-			go func(cli int) {
-				ok := false
-				defer func() { ca[cli] <- ok }()
-				var cka [nservers]*Clerk
-				for i := 0; i < nservers; i++ {
-					cka[i] = MakeClerk([]string{port(tag, i)}, NextClientId())
-				}
-				key := strconv.Itoa(cli)
-				last := ""
-				cka[0].Put(key, last)
-				for atomic.LoadInt32(&done) == 0 {
-					ci := (rand.Int() % 2)
-					if (rand.Int() % 1000) < 500 {
-						nv := strconv.Itoa(rand.Int())
-						cka[ci].Put(key, nv)
-						last = nv
-					} else {
-						v := cka[ci].Get(key)
-						if v != last {
-							t.Fatalf("%v: wrong value, key %v, wanted %v, got %v",
-								cli, key, last, v)
-						}
-					}
-				}
-				ok = true
-			}(xcli)
-		}
-
-		time.Sleep(3 * time.Second)
-
-		part(t, tag, nservers, []int{2, 3, 4}, []int{0, 1}, []int{})
-
-		// can majority partition make progress even though
-		// minority servers were interrupted in the middle of
-		// paxos agreements?
-		check(t, ck2, "q", "q")
-		ck2.Put("q", "qq")
-		check(t, ck2, "q", "qq")
-
-		// restore network, wait for all threads to exit.
-		part(t, tag, nservers, []int{0, 1, 2, 3, 4}, []int{}, []int{})
-		atomic.StoreInt32(&done, 1)
-		ok := true
-		for i := 0; i < nclients; i++ {
-			z := <-ca[i]
-			ok = ok && z
-		}
-		if ok == false {
-			t.Fatal("something is wrong")
-		}
-		check(t, ck2, "q", "qq")
-	}
-
-	fmt.Printf("  ... Passed\n")
-}
-
 func TestManyPartition(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -623,7 +536,7 @@ func TestManyPartition(t *testing.T) {
 
 	tag := "many"
 	const nservers = 5
-	var kva []*KVPaxos = make([]*KVPaxos, nservers)
+	var kva []*PaxosKVServer = make([]*PaxosKVServer, nservers)
 	defer cleanup(kva)
 	defer cleanpp(tag, nservers)
 
@@ -682,17 +595,17 @@ func TestManyPartition(t *testing.T) {
 				j := rand.Intn(i + 1)
 				sa[i], sa[j] = sa[j], sa[i]
 			}
-			myck := MakeClerk(sa, NextClientId())
+			mypc := MakePaxosClient(sa, NextClientId())
 			key := strconv.Itoa(cli)
 			last := ""
-			myck.Put(key, last)
+			mypc.Put(key, last)
 			for atomic.LoadInt32(&done) == 0 {
 				if (rand.Int() % 1000) < 500 {
 					nv := strconv.Itoa(rand.Int())
-					myck.Append(key, nv)
+					mypc.Append(key, nv)
 					last = NextValue(last, nv)
 				} else {
-					v := myck.Get(key)
+					v := mypc.Get(key)
 					if v != last {
 						t.Fatalf("%v: get wrong value, key %v, wanted %v, got %v",
 							cli, key, last, v)

@@ -1,24 +1,8 @@
-package paxos
+//Name: paxos.go
+//Description: Implements multi-paxos as described in Paxos Made Simple by Leslie Lamport
+//Author: Rahul Batra
 
-//
-// Paxos library, to be included in an application.
-// Multiple applications will run, each including
-// a Paxos peer.
-//
-// Manages a sequence of agreed-on values.
-// The set of peers is fixed.
-// Copes with network failures (partition, msg loss, &c).
-// Does not store anything persistently, so cannot handle crash+restart.
-//
-// The application interface:
-//
-// px = paxos.Make(peers []string, me string)
-// px.Start(seq int, v interface{}) -- start agreement on new instance
-// px.Status(seq int) (Fate, v interface{}) -- get info about an instance
-// px.Done(seq int) -- ok to forget all instances <= seq
-// px.Max() int -- highest instance seq known, or -1
-// px.Min() int -- instances before this seq have been forgotten
-//
+package paxos
 
 import "net"
 import "net/rpc"
