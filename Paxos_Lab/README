@@ -1,11 +1,13 @@
-1. This code contains implementation of Multi-Paxos Protocol as described in the paper
-"Paxos Made Simple" by Leslie Lamport
+1. This code contains implementation of Multi-Paxos Protocol as described 
+in the paper "Paxos Made Simple" by Leslie Lamport
 
-2. The implementation is for simulated network where clients and servers are just
-separate go routines inside one process, and communicate using RPCs implemented over go channels.
-Also, the implementation has been tested throughly against the test suite adapted from MIT 6.824 course.
+2. The implementation is for simulated network where clients and servers are 
+just separate go routines inside one process, and communicate using RPCs 
+implemented over go channels. Also, the implementation has been tested 
+throughly against a comprehensive test suite adapted from MIT 6.824 course.
 
-3. Note, that there is no main function. Instead, all the initilization are done through the tester code.
+3. Note, that there is no main function. Instead, all the initilization is 
+	done through the tester code.
 
 4. To run 
 	a) paxos peer: 
