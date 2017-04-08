@@ -206,7 +206,7 @@ func (kv *PaxosKVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) e
 }
 
 // tell the server to shut itself down.
-func (kv *PaxosKVServer) kill() {
+func (kv *PaxosKVServer) Kill() {
 	DPrintf("Kill(%d): die\n", kv.me)
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.l.Close()
@@ -219,7 +219,7 @@ func (kv *PaxosKVServer) isdead() bool {
 }
 
 //For testing
-func (kv *PaxosKVServer) setunreliable(what bool) {
+func (kv *PaxosKVServer) Setunreliable(what bool) {
 	if what {
 		atomic.StoreInt32(&kv.unreliable, 1)
 	} else {
@@ -283,7 +283,7 @@ func StartServer(servers []string, me int) *PaxosKVServer {
 			}
 			if err != nil && kv.isdead() == false {
 				fmt.Printf("PaxosKVServer(%v) accept: %v\n", me, err.Error())
-				kv.kill()
+				kv.Kill()
 			}
 		}
 	}()

@@ -35,7 +35,7 @@ func port(tag string, host int) string {
 func cleanup(kva []*PaxosKVServer) {
 	for i := 0; i < len(kva); i++ {
 		if kva[i] != nil {
-			kva[i].kill()
+			kva[i].Kill()
 		}
 	}
 }
@@ -385,7 +385,7 @@ func TestUnreliable(t *testing.T) {
 	}
 	for i := 0; i < nservers; i++ {
 		kva[i] = StartServer(kvh, i)
-		kva[i].setunreliable(true)
+		kva[i].Setunreliable(true)
 	}
 
 	pc := MakePaxosClient(kvh, NextClientId())
@@ -550,7 +550,7 @@ func TestManyPartition(t *testing.T) {
 			}
 		}
 		kva[i] = StartServer(kvh, i)
-		kva[i].setunreliable(true)
+		kva[i].Setunreliable(true)
 	}
 	defer part(t, tag, nservers, []int{}, []int{}, []int{})
 	part(t, tag, nservers, []int{0, 1, 2, 3, 4}, []int{}, []int{})
