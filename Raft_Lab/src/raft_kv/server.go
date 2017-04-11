@@ -2,7 +2,7 @@
 //Description: Main file for raft server
 //Author: Rahul Batra
 
-package raftkv
+package raft_kv
 
 import (
 	"encoding/gob"

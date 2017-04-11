@@ -2,7 +2,7 @@
 //Description: Main file for raft client
 //Author: Rahul Batra
 
-package raftkv
+package raft_kv
 
 const (
 	OK         = "OK"

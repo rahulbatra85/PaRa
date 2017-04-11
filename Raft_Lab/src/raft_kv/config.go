@@ -2,7 +2,7 @@
 //Description: Helper for testing out raft client/server implementation
 //Author: This is adapted from MIT 6.824 course
 
-package raftkv
+package raft_kv
 
 import "labrpc"
 import "testing"
@@ -40,7 +40,7 @@ type config struct {
 	tag          string
 	net          *labrpc.Network
 	n            int
-	kvservers    []*RaftKV
+	KVServers    []*RaftKV
 	saved        []*raft.Persister
 	endnames     [][]string // names of each server's sending ClientEnds
 	clients      map[*RaftClient][]string
@@ -48,12 +48,12 @@ type config struct {
 	maxraftstate int
 }
 
-func (cfg *config) cleanup() {
+func (cfg *config) Cleanup() {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
-	for i := 0; i < len(cfg.kvservers); i++ {
-		if cfg.kvservers[i] != nil {
-			cfg.kvservers[i].Kill()
+	for i := 0; i < len(cfg.KVServers); i++ {
+		if cfg.KVServers[i] != nil {
+			cfg.KVServers[i].Kill()
 		}
 	}
 }
@@ -156,7 +156,7 @@ func (cfg *config) partition(p1 []int, p2 []int) {
 // Create a clerk with clerk specific server names.
 // Give it connections to all of the servers, but for
 // now enable only connections to servers in to[].
-func (cfg *config) makeClient(to []int) *RaftClient {
+func (cfg *config) MakeClient(to []int) *RaftClient {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 
@@ -242,12 +242,12 @@ func (cfg *config) ShutdownServer(i int) {
 		cfg.saved[i] = cfg.saved[i].Copy()
 	}
 
-	kv := cfg.kvservers[i]
+	kv := cfg.KVServers[i]
 	if kv != nil {
 		cfg.mu.Unlock()
 		kv.Kill()
 		cfg.mu.Lock()
-		cfg.kvservers[i] = nil
+		cfg.KVServers[i] = nil
 	}
 }
 
@@ -280,10 +280,10 @@ func (cfg *config) StartServer(i int) {
 	}
 	cfg.mu.Unlock()
 
-	cfg.kvservers[i] = StartKVServer(ends, i, cfg.saved[i], cfg.maxraftstate)
+	cfg.KVServers[i] = StartKVServer(ends, i, cfg.saved[i], cfg.maxraftstate)
 
-	kvsvc := labrpc.MakeService(cfg.kvservers[i])
-	rfsvc := labrpc.MakeService(cfg.kvservers[i].rf)
+	kvsvc := labrpc.MakeService(cfg.KVServers[i])
+	rfsvc := labrpc.MakeService(cfg.KVServers[i].rf)
 	srv := labrpc.MakeServer()
 	srv.AddService(kvsvc)
 	srv.AddService(rfsvc)
@@ -295,7 +295,7 @@ func (cfg *config) Leader() (bool, int) {
 	defer cfg.mu.Unlock()
 
 	for i := 0; i < cfg.n; i++ {
-		_, is_leader := cfg.kvservers[i].rf.GetState()
+		_, is_leader := cfg.KVServers[i].rf.GetState()
 		if is_leader {
 			return true, i
 		}
@@ -330,7 +330,7 @@ func make_config(t *testing.T, tag string, n int, unreliable bool, maxraftstate 
 	cfg.tag = tag
 	cfg.net = labrpc.MakeNetwork()
 	cfg.n = n
-	cfg.kvservers = make([]*RaftKV, cfg.n)
+	cfg.KVServers = make([]*RaftKV, cfg.n)
 	cfg.saved = make([]*raft.Persister, cfg.n)
 	cfg.endnames = make([][]string, cfg.n)
 	cfg.clients = make(map[*RaftClient][]string)
@@ -345,6 +345,36 @@ func make_config(t *testing.T, tag string, n int, unreliable bool, maxraftstate 
 	cfg.ConnectAll()
 
 	cfg.net.Reliable(!unreliable)
+
+	return cfg
+}
+
+func Make_cluster(tag string, n int, networkType string, maxraftstate int) *config {
+	runtime.GOMAXPROCS(4)
+	cfg := &config{}
+	cfg.t = nil
+	cfg.tag = tag
+	cfg.net = labrpc.MakeNetwork()
+	cfg.n = n
+	cfg.KVServers = make([]*RaftKV, cfg.n)
+	cfg.saved = make([]*raft.Persister, cfg.n)
+	cfg.endnames = make([][]string, cfg.n)
+	cfg.clients = make(map[*RaftClient][]string)
+	cfg.nextClientId = cfg.n + 1000 // client ids start 1000 above the highest serverid
+	cfg.maxraftstate = maxraftstate
+
+	// create a full set of KV servers.
+	for i := 0; i < cfg.n; i++ {
+		cfg.StartServer(i)
+	}
+
+	cfg.ConnectAll()
+
+	if networkType == "UNRELIABLE" {
+		cfg.net.Reliable(false)
+	} else {
+		cfg.net.Reliable(true)
+	}
 
 	return cfg
 }

@@ -2,7 +2,7 @@
 //Description: Test suite for raft client/server implementation
 //Author: This is adapted from MIT 6.824 course
 
-package raftkv
+package raft_kv
 
 import "testing"
 import "strconv"
@@ -28,7 +28,7 @@ func check(t *testing.T, rc *RaftClient, key string, value string) {
 func run_client(t *testing.T, cfg *config, me int, ca chan bool, fn func(me int, rc *RaftClient, t *testing.T)) {
 	ok := false
 	defer func() { ca <- ok }()
-	rc := cfg.makeClient(cfg.All())
+	rc := cfg.MakeClient(cfg.All())
 	fn(me, rc, t)
 	ok = true
 	cfg.deleteClient(rc)
@@ -135,9 +135,9 @@ func partitioner(t *testing.T, cfg *config, ch chan bool, done *int32) {
 func GenericTest(t *testing.T, tag string, nclients int, unreliable bool, crash bool, partitions bool, maxraftstate int) {
 	const nservers = 5
 	cfg := make_config(t, tag, nservers, unreliable, maxraftstate)
-	defer cfg.cleanup()
+	defer cfg.Cleanup()
 
-	rc := cfg.makeClient(cfg.All())
+	rc := cfg.MakeClient(cfg.All())
 
 	done_partitioner := int32(0)
 	done_clients := int32(0)
@@ -256,9 +256,9 @@ func TestUnreliable(t *testing.T) {
 func TestUnreliableOneKey(t *testing.T) {
 	const nservers = 3
 	cfg := make_config(t, "onekey", nservers, true, -1)
-	defer cfg.cleanup()
+	defer cfg.Cleanup()
 
-	rc := cfg.makeClient(cfg.All())
+	rc := cfg.MakeClient(cfg.All())
 
 	fmt.Printf("Test: Concurrent Append to same key, unreliable ...\n")
 
@@ -291,8 +291,8 @@ func TestUnreliableOneKey(t *testing.T) {
 func TestOnePartition(t *testing.T) {
 	const nservers = 5
 	cfg := make_config(t, "partition", nservers, false, -1)
-	defer cfg.cleanup()
-	rc := cfg.makeClient(cfg.All())
+	defer cfg.Cleanup()
+	rc := cfg.MakeClient(cfg.All())
 
 	rc.Put("1", "13")
 
@@ -301,9 +301,9 @@ func TestOnePartition(t *testing.T) {
 	p1, p2 := cfg.make_partition()
 	cfg.partition(p1, p2)
 
-	ckp1 := cfg.makeClient(p1)  // connect ckp1 to p1
-	ckp2a := cfg.makeClient(p2) // connect ckp2a to p2
-	ckp2b := cfg.makeClient(p2) // connect ckp2b to p2
+	ckp1 := cfg.MakeClient(p1)  // connect ckp1 to p1
+	ckp2a := cfg.MakeClient(p2) // connect ckp2a to p2
+	ckp2b := cfg.MakeClient(p2) // connect ckp2b to p2
 
 	ckp1.Put("1", "14")
 	check(t, ckp1, "1", "14")
@@ -410,9 +410,9 @@ func TestSnapshotRPC(t *testing.T) {
 	const nservers = 3
 	maxraftstate := 1000
 	cfg := make_config(t, "snapshotrpc", nservers, false, maxraftstate)
-	defer cfg.cleanup()
+	defer cfg.Cleanup()
 
-	rc := cfg.makeClient(cfg.All())
+	rc := cfg.MakeClient(cfg.All())
 
 	fmt.Printf("Test: InstallSnapshot RPC ...\n")
 
@@ -422,7 +422,7 @@ func TestSnapshotRPC(t *testing.T) {
 	// a bunch of puts into the majority partition.
 	cfg.partition([]int{0, 1}, []int{2})
 	{
-		ck1 := cfg.makeClient([]int{0, 1})
+		ck1 := cfg.MakeClient([]int{0, 1})
 		for i := 0; i < 50; i++ {
 			ck1.Put(strconv.Itoa(i), strconv.Itoa(i))
 		}
@@ -440,7 +440,7 @@ func TestSnapshotRPC(t *testing.T) {
 	// lagging server, so that it has to catch up.
 	cfg.partition([]int{0, 2}, []int{1})
 	{
-		ck1 := cfg.makeClient([]int{0, 2})
+		ck1 := cfg.MakeClient([]int{0, 2})
 		ck1.Put("c", "C")
 		ck1.Put("d", "D")
 		check(t, ck1, "a", "A")

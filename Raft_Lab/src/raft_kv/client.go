@@ -2,7 +2,7 @@
 //Description: Implements Raft Key-Value Client
 //Author: Rahul Batra
 
-package raftkv
+package raft_kv
 
 import "labrpc"
 

@@ -1,0 +1,14 @@
+
+
+Type: RELIABLE
+NumClients:2 NumServers: 3 NumRequests:100
+Num(GET),TotalTime(GET),Average Latency(GET),Max Latency(GET),Min Latency(GET),Num(PUT),TotalTime(PUT),Average Latency(PUT),Max Latency(PUT),Min Latency(PUT)
+46,0.941415,0.020466,0.020856,0.020125,54,1.096167,0.020299,0.020703,0.011513
+55,1.126769,0.020487,0.021375,0.020167,45,0.920586,0.020457,0.020737,0.019569
+
+
+Type: UNRELIABLE
+NumClients:2 NumServers: 3 NumRequests:100
+Num(GET),TotalTime(GET),Average Latency(GET),Max Latency(GET),Min Latency(GET),Num(PUT),TotalTime(PUT),Average Latency(PUT),Max Latency(PUT),Min Latency(PUT)
+47,0.997702,0.021228,0.041647,0.010711,53,0.952959,0.017980,0.030307,0.010663
+54,1.104856,0.020460,0.031758,0.010709,46,0.942611,0.020492,0.031228,0.010637
