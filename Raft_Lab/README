@@ -10,6 +10,7 @@ separate go routines inside one process, and communicate using RPCs implemented 
 
 4. To run 
 	labrpc
+		export GOPATH=[pathprefix]/Raft_Lab/raft_labrpc
 		a) raft peer: 
 			cd raft  
 			go test
@@ -17,6 +18,7 @@ separate go routines inside one process, and communicate using RPCs implemented 
 		   cd raft_kv
 		   go test
 	raft_unix
+		export GOPATH=[pathprefix]/Raft_Lab/raft_unix
 		a) cd raft_unix/raft_profiler
 			go build raft_profiler.go
 			./raft_profiler -p r(for running with reliable network)

@@ -10,6 +10,7 @@ throughly against a comprehensive test suite adapted from MIT 6.824 course.
 	done through the tester code.
 
 4. To run 
+	 export GOPATH=[pathprefix]/Paxos_Lab/
 	a) paxos peer: 
 		cd paxos  
 		go test
