@@ -4,10 +4,19 @@
 
 package raft
 
-import "sync"
-import "labrpc"
-import "bytes"
-import "encoding/gob"
+import (
+	"bytes"
+	"encoding/gob"
+	"fmt"
+	"log"
+	"math/rand"
+	"net"
+	"net/rpc"
+	"os"
+	"sync"
+	"sync/atomic"
+	"syscall"
+)
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -33,12 +42,16 @@ const (
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
-	mu        sync.Mutex
-	stmu      sync.RWMutex
-	applyMu   sync.Mutex
-	peers     []*labrpc.ClientEnd
-	persister *Persister
-	me        int // index into peers[]
+	mu         sync.Mutex
+	stmu       sync.RWMutex
+	applyMu    sync.Mutex
+	persister  *Persister
+	l          net.Listener
+	dead       int32 // for testing
+	unreliable int32 // for testing
+	rpcCount   int32 // for testing
+	peers      []string
+	me         int // index into peers[]
 
 	// Raft paper's Figure 2 description of state
 	state     RaftState
@@ -67,6 +80,38 @@ type Raft struct {
 	//config
 	heartbeatFrequency int //in ms
 	electionTimeout    int //in ms
+}
+
+//
+// call() sends an RPC to the rpcname handler on server srv
+// with arguments args, waits for the reply, and leaves the
+// reply in reply. the reply argument should be a pointer
+// to a reply structure.
+//
+// the return value is true if the server responded, and false
+// if call() was not able to contact the server. in particular,
+// the replys contents are only valid if call() returned true.
+//
+// call() will time out and return an error after a while
+//if it does not get a reply from the server.
+func call(srv string, name string, args interface{}, reply interface{}) bool {
+	c, err := rpc.Dial("unix", srv)
+	if err != nil {
+		err1 := err.(*net.OpError)
+		if err1.Err != syscall.ENOENT && err1.Err != syscall.ECONNREFUSED {
+			//fmt.Printf("paxos Dial() failed: %v\n", err1)
+		}
+		return false
+	}
+	defer c.Close()
+
+	err = c.Call(name, args, reply)
+	if err == nil {
+		return true
+	}
+
+	fmt.Println(err)
+	return false
 }
 
 //
@@ -139,6 +184,29 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 //
 func (rf *Raft) Kill() {
 	//do nothing
+	atomic.StoreInt32(&rf.dead, 1)
+	if rf.l != nil {
+		rf.l.Close()
+	}
+}
+
+// has this peer been asked to shut down?
+func (rf *Raft) isdead() bool {
+	return atomic.LoadInt32(&rf.dead) != 0
+}
+
+//Used for testing
+func (rf *Raft) setunreliable(what bool) {
+	if what {
+		atomic.StoreInt32(&rf.unreliable, 1)
+	} else {
+		atomic.StoreInt32(&rf.unreliable, 0)
+	}
+}
+
+//Used for testing
+func (rf *Raft) isunreliable() bool {
+	return atomic.LoadInt32(&rf.unreliable) != 0
 }
 
 //
@@ -150,15 +218,15 @@ func (rf *Raft) Kill() {
 // recent saved state, if any. applyCh is a channel on which the
 // tester or service expects Raft to send ApplyMsg messages.
 //
-func Make(peers []*labrpc.ClientEnd, me int,
-	persister *Persister, applyCh chan ApplyMsg) *Raft {
+func Make(peers []string, me int,
+	persister *Persister, applyCh chan ApplyMsg, rpcs *rpc.Server) *Raft {
 	rf := &Raft{}
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
 
 	// Initialization code here.
-	r := persister.ReadRaftState()
+	//r := persister.ReadRaftState()
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.nextIndex = make(map[int]int)
@@ -178,13 +246,61 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	DPrintf("Serv[%d] Starting Raft. Loading Persistent State\n", rf.me)
 	rf.CurrentTerm = 0
 	rf.VotedFor = 0
-	rf.readPersist(r)
+	//rf.readPersist(r)
 	if len(rf.Log) == 0 {
 		entry := LogEntry{Term: 0, Cmd: nil}
 		rf.AppendLog(entry)
 	}
 
 	DPrintf("Serv[%d] Initial Term=%d,VotedFor=%d,Log=%v\n", rf.me, rf.CurrentTerm, rf.VotedFor, rf.Log)
+
+	if rpcs != nil {
+		// caller will create socket &c
+		rpcs.Register(rf)
+	} else {
+		rpcs = rpc.NewServer()
+		rpcs.Register(rf)
+
+		// prepare to receive connections from clients.
+		// change "unix" to "tcp" to use over a network.
+		os.Remove(peers[me]) // only needed for "unix"
+		l, e := net.Listen("unix", peers[me])
+		if e != nil {
+			log.Fatal("listen error: ", e)
+		}
+		rf.l = l
+
+		// create a thread to accept RPC connections
+		go func() {
+			for rf.isdead() == false {
+				conn, err := rf.l.Accept()
+				if err == nil && rf.isdead() == false {
+					if rf.isunreliable() && (rand.Int63()%10000) < 100 {
+						// discard the request.
+						conn.Close()
+					} else if rf.isunreliable() && (rand.Int63()%10000) < 200 {
+						// process the request but force discard of reply.
+						c1 := conn.(*net.UnixConn)
+						f, _ := c1.File()
+						err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+						if err != nil {
+							fmt.Printf("shutdown: %v\n", err)
+						}
+						atomic.AddInt32(&rf.rpcCount, 1)
+						go rpcs.ServeConn(conn)
+					} else {
+						atomic.AddInt32(&rf.rpcCount, 1)
+						go rpcs.ServeConn(conn)
+					}
+				} else if err == nil {
+					conn.Close()
+				}
+				if err != nil && rf.isdead() == false {
+					fmt.Printf("Raft(%v) accept: %v\n", me, err.Error())
+				}
+			}
+		}()
+	}
 
 	//Start Raft Server
 	go rf.run_server()

@@ -113,12 +113,27 @@ func all(numClients int, numServers int, numRequests int) {
 }
 
 func startTest(numClients int, numServers int, numRequests int, networkType string, outputType string) {
-	cfg := raft_kv.Make_cluster("TEST", numServers, networkType, 1)
+	// connections
+	var rKVConns []string = make([]string, numServers)
+	for c := 0; c < numServers; c++ {
+		rKVConns[c] = port(c)
+	}
+
+	//Create servers
+	var rKVServers []*raft_kv.RaftKVServer = make([]*raft_kv.RaftKVServer, numServers)
+	for s := 0; s < numServers; s++ {
+		rKVServers[s] = raft_kv.StartKVServer(rKVConns, s, nil, 0)
+		if networkType == UNRELIABLE {
+			rKVServers[s].Setunreliable(true)
+		} else if networkType == RELIABLE {
+			rKVServers[s].Setunreliable(false)
+		}
+	}
 
 	//Create clients
 	var rClients []*raft_kv.RaftClient = make([]*raft_kv.RaftClient, numClients)
 	for c := 0; c < numClients; c++ {
-		rClients[c] = cfg.MakeClient(cfg.All())
+		rClients[c] = raft_kv.MakeRaftClient(rKVConns, NextClientId())
 	}
 
 	statsCh := make(chan clientStats, numClients)
@@ -134,6 +149,7 @@ func startTest(numClients int, numServers int, numRequests int, networkType stri
 			data.minPUTTime = 200000 //Some big number
 			fmt.Printf("Client ID=%d Enter\n", cid)
 			for r := 0; r < numRequests; r++ {
+				fmt.Printf("Client ID=%d Req=%d\n", cid, r)
 				//Generate request
 				requestType := rand.Int() % 2
 				key := strconv.Itoa(rand.Int() % 1000)
@@ -202,13 +218,22 @@ func startTest(numClients int, numServers int, numRequests int, networkType stri
 			<-statsCh
 		}
 	}
-	StopKVServers(cfg.KVServers)
+	StopKVServers(rKVServers)
 }
 
-func StopKVServers(rKVServers []*raft_kv.RaftKV) {
+func StopKVServers(rKVServers []*raft_kv.RaftKVServer) {
 	for i := 0; i < len(rKVServers); i++ {
 		if rKVServers[i] != nil {
 			rKVServers[i].Kill()
 		}
 	}
+}
+
+func port(host int) string {
+	s := "/var/tmp/paxos_profile-"
+	s += strconv.Itoa(os.Getuid()) + "/"
+	os.Mkdir(s, 0777)
+	s += strconv.Itoa(os.Getpid()) + "-"
+	s += strconv.Itoa(host)
+	return s
 }

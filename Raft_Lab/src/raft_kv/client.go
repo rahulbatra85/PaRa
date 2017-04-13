@@ -4,20 +4,49 @@
 
 package raft_kv
 
-import "labrpc"
+import (
+	"fmt"
+	"net/rpc"
+)
 
 type RaftClient struct {
-	servers   []*labrpc.ClientEnd
+	servers   []string
 	seqNum    int
 	leaderIdx int
 	id        int
 }
 
-func MakeRaftClient(servers []*labrpc.ClientEnd, id int) *RaftClient {
+func MakeRaftClient(servers []string, id int) *RaftClient {
 	rc := new(RaftClient)
 	rc.servers = servers
 	rc.id = id
 	return rc
+}
+
+//
+// call() sends an RPC to the rpcname handler on server srv
+// with arguments args, waits for the reply, and leaves the
+// reply in reply. the reply argument should be a pointer
+// to a reply structure.
+//
+// the return value is true if the server responded, and false
+// if call() was not able to contact the server.
+//
+func call(srv string, rpcname string,
+	args interface{}, reply interface{}) bool {
+	c, errx := rpc.Dial("unix", srv)
+	if errx != nil {
+		return false
+	}
+	defer c.Close()
+
+	err := c.Call(rpcname, args, reply)
+	if err == nil {
+		return true
+	}
+
+	fmt.Println(err)
+	return false
 }
 
 // This function is for the client to obtain the
@@ -35,7 +64,7 @@ func (rc *RaftClient) Get(key string) string {
 	var retval string
 	for !done {
 		DPrintf("\tTrying GET Request to server[%d].\n", rc.leaderIdx)
-		ok := rc.servers[rc.leaderIdx].Call("RaftKV.Get", &args, &reply)
+		ok := call(rc.servers[rc.leaderIdx], "RaftKVServer.Get", &args, &reply)
 		if !ok {
 			DPrintf("\tRESP: Request to server[%d] Failed.\n", rc.leaderIdx)
 			rc.leaderIdx = (rc.leaderIdx + 1) % len(rc.servers)
@@ -73,7 +102,7 @@ func (rc *RaftClient) PutAppend(key string, value string, op string) {
 	done := false
 	for !done {
 		DPrintf("\tTrying PUT Request to server[%d].\n", rc.leaderIdx)
-		ok := rc.servers[rc.leaderIdx].Call("RaftKV.PutAppend", &args, &reply)
+		ok := call(rc.servers[rc.leaderIdx], "RaftKVServer.PutAppend", &args, &reply)
 		if !ok {
 			DPrintf("\tRESP: Request to server[%d] Failed.\n", rc.leaderIdx)
 			rc.leaderIdx = (rc.leaderIdx + 1) % len(rc.servers)

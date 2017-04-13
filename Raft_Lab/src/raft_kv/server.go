@@ -7,10 +7,15 @@ package raft_kv
 import (
 	"encoding/gob"
 	"fmt"
-	"labrpc"
+	"log"
+	"math/rand"
+	"net"
+	"net/rpc"
 	"os"
 	"raft"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -31,18 +36,21 @@ type Op struct {
 	ReqId    int
 }
 
-type RaftKV struct {
+type RaftKVServer struct {
 	muKVDB         sync.RWMutex
 	muNotifyCh     sync.RWMutex
-	me             int
 	rf             *raft.Raft
+	l              net.Listener
+	me             int
+	dead           int32 // for testing
+	unreliable     int32 // for testing
 	applyCh        chan raft.ApplyMsg
 	kvdb           map[string]string
 	chMap          map[int]chan ClientApply
 	clientReplyMap map[int]ClientApply
 }
 
-func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
+func (kv *RaftKVServer) Get(args *GetArgs, reply *GetReply) error {
 	DPrintf("KVSERVER%d: Get Enter. %v", kv.me, args)
 	cmd := Op{Type: "Get", Key: args.Key, Value: "", ClientId: args.ClientId, ReqId: args.ReqId}
 
@@ -53,9 +61,11 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 		reply.Err = rep.Err
 		reply.Value = rep.Value
 		reply.WrongLeader = 2
+		return nil
 		//If this request was applied previously, but older than the last applied for this client
 	} else if found == true && args.ReqId < rep.ReqId {
 		reply.Err = OldRequest
+		return fmt.Errorf("Old request")
 	} else {
 		idx, term, isLeader := kv.rf.Start(cmd)
 		if isLeader == false {
@@ -104,10 +114,10 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 		}
 	}
 	DPrintf("KVSERVER: GET Exit. %v\n", reply)
-
+	return nil
 }
 
-func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
+func (kv *RaftKVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	DPrintf("KVSERVER%d: PUT Enter. %v\n", kv.me, args)
 	cmd := Op{Type: args.Op, Key: args.Key, Value: args.Value, ClientId: args.ClientId, ReqId: args.ReqId}
 
@@ -116,8 +126,10 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		reply.Err = rep.Err
 		reply.WrongLeader = 2
 		DPrintf("KVSERVER%d: Replayed Request %v\n", kv.me, args)
+		return nil
 	} else if found == true && args.ReqId < rep.ReqId {
 		reply.Err = OldRequest
+		return fmt.Errorf("Old Request")
 	} else {
 		idx, term, isLeader := kv.rf.Start(cmd)
 		if isLeader == false {
@@ -165,17 +177,39 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	}
 	DPrintf("KVSERVER%d: PUT Exit. %v\n", kv.me, reply)
 
-	return
+	return nil
 }
 
 //
-// the tester calls Kill() when a RaftKV instance won't
+// the tester calls Kill() when a RaftKVServer instance won't
 // be needed again. you are not required to do anything
 // in Kill(), but it might be convenient to (for example)
 // turn off debug output from this instance.
 //
-func (kv *RaftKV) Kill() {
+func (kv *RaftKVServer) Kill() {
 	kv.rf.Kill()
+	DPrintf("Kill(%d): die\n", kv.me)
+	atomic.StoreInt32(&kv.dead, 1)
+	kv.l.Close()
+	kv.rf.Kill()
+}
+
+// call this to find out if the server is dead.
+func (kv *RaftKVServer) isdead() bool {
+	return atomic.LoadInt32(&kv.dead) != 0
+}
+
+//For testing
+func (kv *RaftKVServer) Setunreliable(what bool) {
+	if what {
+		atomic.StoreInt32(&kv.unreliable, 1)
+	} else {
+		atomic.StoreInt32(&kv.unreliable, 0)
+	}
+}
+
+func (kv *RaftKVServer) isunreliable() bool {
+	return atomic.LoadInt32(&kv.unreliable) != 0
 }
 
 //
@@ -191,26 +225,65 @@ func (kv *RaftKV) Kill() {
 // StartKVServer() must return quickly, so it should start goroutines
 // for any long-running work.
 //
-func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int) *RaftKV {
+func StartKVServer(servers []string, me int, persister *raft.Persister, maxraftstate int) *RaftKVServer {
 	// call gob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
 	gob.Register(Op{})
 
-	kv := new(RaftKV)
+	kv := new(RaftKVServer)
 	kv.me = me
+	rpcs := rpc.NewServer()
+	rpcs.Register(kv)
 
 	kv.kvdb = make(map[string]string)
 	kv.chMap = make(map[int]chan ClientApply)
 	kv.clientReplyMap = make(map[int]ClientApply)
 
 	kv.applyCh = make(chan raft.ApplyMsg)
-	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+	kv.rf = raft.Make(servers, me, persister, kv.applyCh, rpcs)
 
 	go kv.ProcessApplyCh()
+
+	os.Remove(servers[me])
+	l, e := net.Listen("unix", servers[me])
+	if e != nil {
+		log.Fatal("listen error: ", e)
+	}
+	kv.l = l
+
+	go func() {
+		for kv.isdead() == false {
+			conn, err := kv.l.Accept()
+			if err == nil && kv.isdead() == false {
+				if kv.isunreliable() && (rand.Int63()%10000) < 100 {
+					// discard the request.
+					conn.Close()
+				} else if kv.isunreliable() && (rand.Int63()%10000) < 200 {
+					// process the request but force discard of reply.
+					c1 := conn.(*net.UnixConn)
+					f, _ := c1.File()
+					err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+					if err != nil {
+						fmt.Printf("shutdown: %v\n", err)
+					}
+					go rpcs.ServeConn(conn)
+				} else {
+					go rpcs.ServeConn(conn)
+				}
+			} else if err == nil {
+				conn.Close()
+			}
+			if err != nil && kv.isdead() == false {
+				fmt.Printf("RaftKVServer(%v) accept: %v\n", me, err.Error())
+				kv.Kill()
+			}
+		}
+	}()
+
 	return kv
 }
 
-func (kv *RaftKV) ProcessApplyCh() {
+func (kv *RaftKVServer) ProcessApplyCh() {
 	for {
 		amsg := <-kv.applyCh
 		msg := amsg.Command.(Op)
@@ -248,7 +321,7 @@ func (kv *RaftKV) ProcessApplyCh() {
 	}
 }
 
-func (kv *RaftKV) GetKVDB(key string) (string, Err) {
+func (kv *RaftKVServer) GetKVDB(key string) (string, Err) {
 	val, ok := kv.kvdb[key]
 	if ok {
 		return val, "OK"
@@ -257,15 +330,15 @@ func (kv *RaftKV) GetKVDB(key string) (string, Err) {
 	}
 }
 
-func (kv *RaftKV) PutKVDB(key string, value string) {
+func (kv *RaftKVServer) PutKVDB(key string, value string) {
 	kv.kvdb[key] = value
 }
 
-func (kv *RaftKV) AppendKVDB(key string, value string) {
+func (kv *RaftKVServer) AppendKVDB(key string, value string) {
 	kv.kvdb[key] = kv.kvdb[key] + value
 }
 
-func (kv *RaftKV) GetNotifyCh(idx int) chan ClientApply {
+func (kv *RaftKVServer) GetNotifyCh(idx int) chan ClientApply {
 	kv.muNotifyCh.RLock()
 	defer kv.muNotifyCh.RUnlock()
 	ch, ok := kv.chMap[idx]
@@ -276,19 +349,19 @@ func (kv *RaftKV) GetNotifyCh(idx int) chan ClientApply {
 	}
 }
 
-func (kv *RaftKV) PutNotifyCh(idx int, ch chan ClientApply) {
+func (kv *RaftKVServer) PutNotifyCh(idx int, ch chan ClientApply) {
 	kv.muNotifyCh.Lock()
 	defer kv.muNotifyCh.Unlock()
 	kv.chMap[idx] = ch
 }
 
-func (kv *RaftKV) RmNotifyCh(idx int) {
+func (kv *RaftKVServer) RmNotifyCh(idx int) {
 	kv.muNotifyCh.Lock()
 	defer kv.muNotifyCh.Unlock()
 	delete(kv.chMap, idx)
 }
 
-func (kv *RaftKV) GetClientReplyMap(id int, ReqId int) (ClientApply, bool) {
+func (kv *RaftKVServer) GetClientReplyMap(id int, ReqId int) (ClientApply, bool) {
 	reply, ok := kv.clientReplyMap[id]
 	if ok {
 		return reply, true
@@ -297,6 +370,6 @@ func (kv *RaftKV) GetClientReplyMap(id int, ReqId int) (ClientApply, bool) {
 	}
 }
 
-func (kv *RaftKV) PutClientReplyMap(id int, reply ClientApply) {
+func (kv *RaftKVServer) PutClientReplyMap(id int, reply ClientApply) {
 	kv.clientReplyMap[id] = reply
 }

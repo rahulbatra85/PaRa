@@ -14,7 +14,7 @@ func (rf *Raft) setCurrentTerm(term int) {
 	rf.stmu.Lock()
 	defer rf.stmu.Unlock()
 	rf.CurrentTerm = term
-	rf.persist()
+	//rf.persist()
 }
 
 func (rf *Raft) getVotedFor() int {
@@ -27,7 +27,7 @@ func (rf *Raft) setVotedFor(id int) {
 	rf.stmu.Lock()
 	defer rf.stmu.Unlock()
 	rf.VotedFor = id
-	rf.persist()
+	//rf.persist()
 }
 
 func (rf *Raft) getState() RaftState {
