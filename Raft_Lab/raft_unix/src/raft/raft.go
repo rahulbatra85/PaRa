@@ -273,10 +273,10 @@ func Make(peers []string, me int,
 			for rf.isdead() == false {
 				conn, err := rf.l.Accept()
 				if err == nil && rf.isdead() == false {
-					if rf.isunreliable() && (rand.Int63()%10000) < 100 {
+					if rf.isunreliable() && (rand.Int63()%2000) < 100 {
 						// discard the request.
 						conn.Close()
-					} else if rf.isunreliable() && (rand.Int63()%10000) < 200 {
+					} else if rf.isunreliable() && (rand.Int63()%2000) < 200 {
 						// process the request but force discard of reply.
 						c1 := conn.(*net.UnixConn)
 						f, _ := c1.File()

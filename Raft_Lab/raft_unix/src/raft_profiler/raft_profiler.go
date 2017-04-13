@@ -149,7 +149,7 @@ func startTest(numClients int, numServers int, numRequests int, networkType stri
 			data.minPUTTime = 200000 //Some big number
 			fmt.Printf("Client ID=%d Enter\n", cid)
 			for r := 0; r < numRequests; r++ {
-				fmt.Printf("Client ID=%d Req=%d\n", cid, r)
+				//fmt.Printf("Client ID=%d Req=%d\n", cid, r)
 				//Generate request
 				requestType := rand.Int() % 2
 				key := strconv.Itoa(rand.Int() % 1000)

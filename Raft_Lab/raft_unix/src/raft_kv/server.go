@@ -255,10 +255,10 @@ func StartKVServer(servers []string, me int, persister *raft.Persister, maxrafts
 		for kv.isdead() == false {
 			conn, err := kv.l.Accept()
 			if err == nil && kv.isdead() == false {
-				if kv.isunreliable() && (rand.Int63()%10000) < 100 {
+				if kv.isunreliable() && (rand.Int63()%2000) < 100 {
 					// discard the request.
 					conn.Close()
-				} else if kv.isunreliable() && (rand.Int63()%10000) < 200 {
+				} else if kv.isunreliable() && (rand.Int63()%2000) < 200 {
 					// process the request but force discard of reply.
 					c1 := conn.(*net.UnixConn)
 					f, _ := c1.File()
